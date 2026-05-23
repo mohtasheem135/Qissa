@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
 
+// Sanity import — confirms the server client module compiles and resolves.
+// We don't query the DB until Phase 3 (schema applied).
+import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
+void createSupabaseServerClient;
+
 export const metadata: Metadata = {
   title: "Qissa — Stories, translated with soul",
   description:
