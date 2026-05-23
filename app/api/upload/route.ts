@@ -14,8 +14,12 @@ const ALLOWED_TYPES = new Set([
  * POST /api/upload
  *
  * Multipart form-data with field `file` — a single image, ≤ 2MB,
- * jpeg/png/webp/avif. Streams to ImageKit and returns the canonical URL
- * the admin form should store in `stories.cover_image_url`.
+ * jpeg/png/webp/avif. Streams to ImageKit and returns the PATH to store
+ * in `stories.cover_image_url`, e.g. "/covers/the_bet_xxx.png".
+ *
+ * The full URL is intentionally not surfaced — render-side composition
+ * uses NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT, so switching ImageKit accounts
+ * or moving behind a CDN never requires touching the DB.
  */
 export async function POST(request: Request): Promise<Response> {
   await requireAdmin();
@@ -47,7 +51,7 @@ export async function POST(request: Request): Promise<Response> {
     const result = await uploadCoverImage({ buffer, fileName: file.name });
     return NextResponse.json({
       ok: true,
-      url: result.url,
+      path: result.path,
       fileId: result.fileId,
       width: result.width,
       height: result.height,

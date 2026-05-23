@@ -5,7 +5,7 @@ import ImageKit from "imagekit";
  * the public + private keys from env.
  *
  * Phase 1 uses ImageKit for cover images (free tier is 20GB storage +
- * 20GB bandwidth/month). All uploads go to /qissa/covers/ by default.
+ * 20GB bandwidth/month). All uploads go to /covers/ by default.
  */
 let cachedClient: ImageKit | null = null;
 
@@ -37,26 +37,19 @@ export interface UploadCoverInput {
 }
 
 export interface UploadCoverResult {
-  url: string;
+  /**
+   * Path under the ImageKit endpoint, e.g. "/covers/the_bet_xxx.png".
+   * The DB stores THIS — never the full URL — so the endpoint can change
+   * without a data migration. Render-side composition happens in
+   * lib/imagekit/url.ts via coverUrl()/thumbnailUrl()/heroUrl().
+   */
+  path: string;
   fileId: string;
-  /** Width/height the file was uploaded with (useful for cards). */
+  /** Width/height the file was uploaded with. */
   width?: number;
   height?: number;
 }
 
-/**
- * Upload a cover image to ImageKit.
- *
- * NOTE on folders: ImageKit composes `result.url = urlEndpoint + filePath`.
- * If your endpoint is `https://ik.imagekit.io/<account>/qissa/` (with a
- * "qissa" path prefix), uploading to folder `/qissa/covers/` produces a
- * doubled `…/qissa/qissa/covers/…` URL that 404s.
- *
- * We upload to a flat `/covers` (overridable via NEXT_PUBLIC_IMAGEKIT_FOLDER
- * env if you want something else). So:
- *   endpoint `…/azadstudio/qissa/` + folder `/covers` -> `…/qissa/covers/file.jpg`  ✓
- *   endpoint `…/azadstudio/`       + folder `/covers` -> `…/covers/file.jpg`        ✓
- */
 const DEFAULT_FOLDER = process.env.IMAGEKIT_UPLOAD_FOLDER ?? "/covers";
 
 export async function uploadCoverImage(input: UploadCoverInput): Promise<UploadCoverResult> {
@@ -70,8 +63,10 @@ export async function uploadCoverImage(input: UploadCoverInput): Promise<UploadC
     useUniqueFileName: true,
   });
 
+  // ImageKit's upload result includes `filePath`, e.g. "/covers/the_bet_xyz.png".
+  // We deliberately drop `result.url` so the API contract surfaces ONLY the path.
   return {
-    url: result.url,
+    path: result.filePath,
     fileId: result.fileId,
     width: result.width,
     height: result.height,

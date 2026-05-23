@@ -23,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { deleteStory, setStoryPublished } from "@/lib/actions/stories";
+import { coverUrl } from "@/lib/imagekit/url";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 
 export interface StoryRow {
@@ -184,12 +185,16 @@ function StoryTableRow({ row }: { row: StoryRow }) {
     });
   }
 
+  // Compose via the helper so the row works whether the DB holds a path
+  // (new uploads) or a legacy full URL.
+  const thumbSrc = coverUrl(row.cover_image_url, "w-80,h-80,c-maintain_ratio");
+
   return (
     <TableRow>
       <TableCell>
-        {row.cover_image_url ? (
+        {thumbSrc ? (
           <Image
-            src={`${row.cover_image_url}?tr=w-80,h-80,c-maintain_ratio`}
+            src={thumbSrc}
             alt=""
             width={48}
             height={48}
