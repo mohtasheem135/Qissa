@@ -24,8 +24,8 @@ export const PROVIDERS: ReadonlyArray<ProviderMeta> = [
   {
     id: "gemini",
     name: "Google Gemini",
-    defaultModel: "gemini-2.0-flash",
-    models: ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"],
+    defaultModel: "gemini-2.5-flash",
+    models: ["gemini-2.5-flash" ,"gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"],
     envKey: "GEMINI_API_KEY",
     freeTier: "15 RPM · 1500 RPD",
   },
@@ -37,16 +37,24 @@ export const PROVIDERS: ReadonlyArray<ProviderMeta> = [
     envKey: "GROQ_API_KEY",
     freeTier: "30 RPM",
   },
-  {
+{
     id: "openrouter",
     name: "OpenRouter",
-    defaultModel: "meta-llama/llama-3.3-70b-instruct:free",
+    // Uses OpenRouter's smart auto-fallback router for zero downtime
+    defaultModel: "openrouter/free", 
     models: [
-      // Free tier (subject to OpenRouter's availability — they rotate slugs)
-      "meta-llama/llama-3.3-70b-instruct:free",
-      "google/gemma-3-27b-it:free",
-      "deepseek/deepseek-chat-v3.1:free",
-      // Paid (any credit balance)
+      // --- Free Tier (Updated Slugs) ---
+      "openrouter/free",                          // Auto-selects best available free model
+      "meta-llama/llama-3.3-70b-instruct:free",   // High-quality general purpose
+      "deepseek/deepseek-v4-flash:free",          // Fast reasoning & coding
+      "google/gemma-4-31b-it:free",               // Google's latest dense model (Vision/Tools)
+      "qwen/qwen3-coder:free",                    // Dedicated frontend/backend coding
+      "minimax/minimax-m2.5:free",                // High context window (205K) & structured logic
+      "openai/gpt-oss-120b:free",                 // High reasoning open-weight MoE
+      "nvidia/nemotron-3-super-120b-a12b:free",   // Massive 1M context window fallback
+      "meta-llama/llama-3.2-3b-instruct:free",    // Ultra-low latency lightweight model
+
+      // --- Paid Tier (Any credit balance) ---
       "openai/gpt-4o-mini",
       "anthropic/claude-sonnet-4-5",
     ],
