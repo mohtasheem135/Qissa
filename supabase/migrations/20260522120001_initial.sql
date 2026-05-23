@@ -5,7 +5,7 @@
 -- story_part_versions, ai_config, translation_jobs.
 --
 -- Design notes:
---   - All ids are uuid (auto-generated via uuid_generate_v4()).
+--   - All ids are uuid (auto-generated via gen_random_uuid()).
 --   - Soft delete via is_active where applicable (categories/subcategories/
 --     tones/stories). Hard delete only via cascade from the parent.
 --   - Updated_at maintained by the shared set_updated_at() trigger function.
@@ -14,8 +14,14 @@
 --     index-backed even on a large table.
 -- =============================================================================
 
-create extension if not exists "uuid-ossp";
-create extension if not exists pg_trgm;
+-- Supabase installs extensions in the `extensions` schema, which is NOT in
+-- the default search_path. Add it so we can reference operator classes like
+-- gin_trgm_ops without explicit schema qualification.
+set search_path to public, extensions;
+
+-- pg_trgm gives us GIN indexes for fast ILIKE on story titles (Phase 8 search).
+-- gen_random_uuid() is core Postgres 13+ — no uuid-ossp needed.
+create extension if not exists pg_trgm with schema extensions;
 
 -- Shared updated_at trigger function. Reused across every table that has an
 -- updated_at column.
@@ -34,7 +40,7 @@ $$;
 -- 1. categories (top-level)
 -- -----------------------------------------------------------------------------
 create table public.categories (
-  id            uuid primary key default uuid_generate_v4(),
+  id            uuid primary key default gen_random_uuid(),
   name          text not null,
   slug          text not null unique,
   icon_emoji    text,
@@ -57,7 +63,7 @@ create index categories_active_order_idx
 -- 2. subcategories (children of categories)
 -- -----------------------------------------------------------------------------
 create table public.subcategories (
-  id            uuid primary key default uuid_generate_v4(),
+  id            uuid primary key default gen_random_uuid(),
   category_id   uuid not null references public.categories(id) on delete cascade,
   name          text not null,
   slug          text not null,
@@ -102,7 +108,7 @@ create index languages_active_order_idx
 -- 4. tones (writer-style presets per language)
 -- -----------------------------------------------------------------------------
 create table public.tones (
-  id               uuid primary key default uuid_generate_v4(),
+  id               uuid primary key default gen_random_uuid(),
   language_code    text not null references public.languages(code) on delete restrict,
   name             text not null,
   display_name     text,
@@ -126,7 +132,7 @@ create index tones_language_active_idx
 -- 5. stories
 -- -----------------------------------------------------------------------------
 create table public.stories (
-  id                      uuid primary key default uuid_generate_v4(),
+  id                      uuid primary key default gen_random_uuid(),
   subcategory_id          uuid not null references public.subcategories(id) on delete restrict,
   target_language         text not null references public.languages(code) on delete restrict,
   tone_id                 uuid not null references public.tones(id) on delete restrict,
@@ -182,7 +188,7 @@ create index stories_title_translated_trgm
 -- 6. story_parts
 -- -----------------------------------------------------------------------------
 create table public.story_parts (
-  id                       uuid primary key default uuid_generate_v4(),
+  id                       uuid primary key default gen_random_uuid(),
   story_id                 uuid not null references public.stories(id) on delete cascade,
   part_number              int  not null check (part_number > 0),
   part_label               text,
@@ -212,7 +218,7 @@ create index story_parts_story_idx
 -- 7. story_part_versions (translation history; per-part auto-incrementing)
 -- -----------------------------------------------------------------------------
 create table public.story_part_versions (
-  id                      uuid primary key default uuid_generate_v4(),
+  id                      uuid primary key default gen_random_uuid(),
   story_part_id           uuid not null references public.story_parts(id) on delete cascade,
   version_number          int  not null check (version_number > 0),
   translated_text         text not null,
@@ -249,7 +255,7 @@ create trigger ai_config_set_updated_at
 -- 9. translation_jobs (per-attempt log for debugging + cost tracking)
 -- -----------------------------------------------------------------------------
 create table public.translation_jobs (
-  id              uuid primary key default uuid_generate_v4(),
+  id              uuid primary key default gen_random_uuid(),
   story_part_id   uuid not null references public.story_parts(id) on delete cascade,
   attempt_number  int  not null default 1,
   status          text not null check (status in ('started','succeeded','failed')),
