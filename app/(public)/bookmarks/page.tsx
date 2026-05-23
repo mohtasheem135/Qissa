@@ -1,0 +1,90 @@
+"use client";
+
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { StoryCard, type StoryCardData } from "@/components/shared/StoryCard";
+import { createClient } from "@/lib/supabase/client";
+import { getBookmarks, subscribeBookmarks } from "@/lib/reader/bookmarks";
+
+function emptyServerSnapshot(): string[] {
+  return [];
+}
+
+export default function BookmarksPage() {
+  const bookmarkIds = useSyncExternalStore(subscribeBookmarks, getBookmarks, emptyServerSnapshot);
+  const [stories, setStories] = useState<StoryCardData[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (bookmarkIds.length === 0) {
+      // Defer the empty transition to a microtask so the setState isn't
+      // synchronous within the effect body (React 19 lint rule).
+      Promise.resolve().then(() => {
+        if (!cancelled) setStories([]);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    const supabase = createClient();
+    supabase
+      .from("stories")
+      .select(
+        `id, title_original, title_translated, cover_image_url, total_parts,
+         estimated_reading_minutes,
+         language:languages!inner ( name_english, font_family, font_family_reading ),
+         tone:tones!inner ( name )`,
+      )
+      .in("id", bookmarkIds)
+      .eq("status", "published")
+      .eq("is_active", true)
+      .then(({ data }) => {
+        if (cancelled) return;
+        const next: StoryCardData[] = (data ?? []).map((row) => ({
+          id: row.id,
+          title_original: row.title_original,
+          title_translated: row.title_translated,
+          cover_image_url: row.cover_image_url,
+          total_parts: row.total_parts,
+          estimated_reading_minutes: row.estimated_reading_minutes,
+          language_name_english: row.language?.name_english ?? "",
+          language_font_family: row.language?.font_family ?? null,
+          language_font_family_reading: row.language?.font_family_reading ?? null,
+          tone_name: row.tone?.name ?? null,
+        }));
+        // Preserve the order in which the user bookmarked them.
+        next.sort(
+          (a, b) => bookmarkIds.indexOf(a.id) - bookmarkIds.indexOf(b.id),
+        );
+        setStories(next);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bookmarkIds]);
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-8">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">Bookmarks</h1>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Saved on this device. {bookmarkIds.length} bookmark
+          {bookmarkIds.length === 1 ? "" : "s"}.
+        </p>
+      </header>
+
+      {stories === null ? (
+        <p className="text-muted-foreground text-sm">Loading…</p>
+      ) : stories.length === 0 ? (
+        <p className="text-muted-foreground text-sm">
+          You haven&rsquo;t bookmarked any stories yet. Tap the heart on a story page to save it.
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {stories.map((story) => (
+            <StoryCard key={story.id} story={story} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
