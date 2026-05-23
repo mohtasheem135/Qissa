@@ -4,7 +4,12 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/check-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { wordCount } from "@/lib/utils/word-count";
-import { INITIAL_STORY_FORM_STATE, type StoryFormState } from "./stories.types";
+import {
+  INITIAL_STORY_EDIT_FORM_STATE,
+  INITIAL_STORY_FORM_STATE,
+  type StoryEditFormState,
+  type StoryFormState,
+} from "./stories.types";
 
 const COMPLEXITY_VALUES = ["daily", "simple", "standard", "advanced", "scholarly"] as const;
 const STATUS_VALUES = ["draft", "published"] as const;
@@ -180,6 +185,81 @@ export async function updateStoryMetadata(input: UpdateStoryMetadataInput): Prom
   if (error) throw new Error(error.message);
   revalidatePath("/admin/stories");
   revalidatePath(`/admin/stories/${id}`);
+}
+
+/**
+ * FormData wrapper around updateStoryMetadata for use with React 19's
+ * useActionState in the EditStoryMetadataDialog. Mirrors createStory's
+ * field validation; required fields are all required on edit too.
+ */
+export async function updateStoryFromForm(
+  _previousState: StoryEditFormState,
+  formData: FormData,
+): Promise<StoryEditFormState> {
+  await requireAdmin();
+
+  const id = (formData.get("id")?.toString() ?? "").trim();
+  if (!id) return { ...INITIAL_STORY_EDIT_FORM_STATE, error: "Missing story id." };
+
+  const titleOriginal = (formData.get("title_original")?.toString() ?? "").trim();
+  const titleTranslated =
+    (formData.get("title_translated")?.toString() ?? "").trim() || null;
+  const authorOriginal =
+    (formData.get("author_original")?.toString() ?? "").trim() || null;
+  const sourceUrl = (formData.get("source_url")?.toString() ?? "").trim() || null;
+  const coverImageUrl =
+    (formData.get("cover_image_url")?.toString() ?? "").trim() || null;
+  const subcategoryId = (formData.get("subcategory_id")?.toString() ?? "").trim();
+  const targetLanguage = (formData.get("target_language")?.toString() ?? "").trim().toLowerCase();
+  const toneId = (formData.get("tone_id")?.toString() ?? "").trim();
+  const complexityRaw = (formData.get("complexity")?.toString() ?? "").trim();
+  const aiProvider = (formData.get("ai_provider")?.toString() ?? "").trim() || null;
+  const aiModel = (formData.get("ai_model")?.toString() ?? "").trim() || null;
+  const customInstructions =
+    (formData.get("custom_instructions")?.toString() ?? "").trim() || null;
+
+  if (!titleOriginal) {
+    return { ...INITIAL_STORY_EDIT_FORM_STATE, error: "Title is required." };
+  }
+  if (!subcategoryId) {
+    return { ...INITIAL_STORY_EDIT_FORM_STATE, error: "Subcategory is required." };
+  }
+  if (!targetLanguage) {
+    return { ...INITIAL_STORY_EDIT_FORM_STATE, error: "Target language is required." };
+  }
+  if (!toneId) {
+    return { ...INITIAL_STORY_EDIT_FORM_STATE, error: "Tone is required." };
+  }
+  if (!(COMPLEXITY_VALUES as ReadonlyArray<string>).includes(complexityRaw)) {
+    return { ...INITIAL_STORY_EDIT_FORM_STATE, error: "Invalid complexity." };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("stories")
+    .update({
+      title_original: titleOriginal,
+      title_translated: titleTranslated,
+      author_original: authorOriginal,
+      source_url: sourceUrl,
+      cover_image_url: coverImageUrl,
+      subcategory_id: subcategoryId,
+      target_language: targetLanguage,
+      tone_id: toneId,
+      complexity: complexityRaw as (typeof COMPLEXITY_VALUES)[number],
+      ai_provider: aiProvider,
+      ai_model: aiModel,
+      custom_instructions: customInstructions,
+    })
+    .eq("id", id);
+
+  if (error) {
+    return { ...INITIAL_STORY_EDIT_FORM_STATE, error: error.message };
+  }
+
+  revalidatePath("/admin/stories");
+  revalidatePath(`/admin/stories/${id}`);
+  return { error: null, savedAt: Date.now() };
 }
 
 export async function setStoryPublished(id: string, published: boolean): Promise<void> {

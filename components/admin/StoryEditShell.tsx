@@ -10,8 +10,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { addStoryPart } from "@/lib/actions/story-parts";
 import { deleteStory, setStoryPublished } from "@/lib/actions/stories";
+import type { ProviderMeta } from "@/lib/ai/registry";
 import { PartCard, type PartCardData, type PartStatus } from "./PartCard";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
+import {
+  EditStoryMetadataDialog,
+  type StoryMetadataInitialValue,
+} from "./EditStoryMetadataDialog";
+import type {
+  CategoryWithSubsOption,
+  LanguageOption,
+  ToneOption,
+} from "./StoryForm";
 
 export interface StoryEditData {
   id: string;
@@ -55,10 +65,26 @@ interface LivePartState {
 
 interface StoryEditShellProps {
   story: StoryEditData;
+  /** Pre-shaped initial values for the EditStoryMetadataDialog. */
+  editInitial: StoryMetadataInitialValue;
+  categories: ReadonlyArray<CategoryWithSubsOption>;
+  languages: ReadonlyArray<LanguageOption>;
+  tones: ReadonlyArray<ToneOption>;
+  providers: ReadonlyArray<ProviderMeta>;
+  configuredProviderIds: ReadonlyArray<string>;
 }
 
-export function StoryEditShell({ story }: StoryEditShellProps) {
+export function StoryEditShell({
+  story,
+  editInitial,
+  categories,
+  languages,
+  tones,
+  providers,
+  configuredProviderIds,
+}: StoryEditShellProps) {
   const router = useRouter();
+  const [editOpen, setEditOpen] = useState(false);
 
   // Out-of-band part status from the SSE queue. Overrides the DB status
   // until the next router.refresh() reconciles.
@@ -257,7 +283,10 @@ export function StoryEditShell({ story }: StoryEditShellProps) {
             ) : null}
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+            Edit details
+          </Button>
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground text-xs">Published</span>
             <Switch
@@ -279,6 +308,17 @@ export function StoryEditShell({ story }: StoryEditShellProps) {
           />
         </div>
       </div>
+
+      <EditStoryMetadataDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        initialValue={editInitial}
+        categories={categories}
+        languages={languages}
+        tones={tones}
+        providers={providers}
+        configuredProviderIds={configuredProviderIds}
+      />
 
       {/* Queue controls */}
       <Card>
