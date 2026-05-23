@@ -75,6 +75,23 @@ export function PartCard({
   const [movingPending, startMoving] = useTransition();
   const [editingOriginal, setEditingOriginal] = useState(false);
 
+  // React-19 "adjust state during render" pattern: when the parent
+  // re-fetches the story (after a translate / re-translate), the new
+  // part.text_translated arrives via props. Without this sync the
+  // textarea would keep showing the stale translation until a full page
+  // refresh. Comparing prop snapshots is the canonical way to do
+  // "props-to-state" without useEffect — see:
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const propSignature = `${part.part_label ?? ""}${part.text_original}${part.text_translated ?? ""}`;
+  const [prevPropSignature, setPrevPropSignature] = useState(propSignature);
+  if (propSignature !== prevPropSignature) {
+    setPrevPropSignature(propSignature);
+    setLabel(part.part_label ?? `Part ${part.part_number}`);
+    setTextOriginal(part.text_original);
+    setTextTranslated(part.text_translated ?? "");
+    setEditingOriginal(false);
+  }
+
   function handleSaveLabel() {
     if ((part.part_label ?? `Part ${part.part_number}`) === label) return;
     startSavingMeta(async () => {
@@ -204,11 +221,10 @@ export function PartCard({
             <Textarea
               value={textOriginal}
               onChange={(event) => setTextOriginal(event.target.value)}
-              rows={10}
-              className="font-mono text-xs"
+              className="h-96 max-h-96 min-h-48 resize-y overflow-y-auto font-mono text-xs"
             />
           ) : (
-            <div className="bg-muted/20 max-h-72 overflow-auto rounded-md border p-3 font-mono text-xs whitespace-pre-wrap">
+            <div className="bg-muted/20 h-96 overflow-y-auto rounded-md border p-3 font-mono text-xs whitespace-pre-wrap">
               {textOriginal || <span className="text-muted-foreground italic">(empty)</span>}
             </div>
           )}
@@ -222,14 +238,13 @@ export function PartCard({
             value={textTranslated}
             onChange={(event) => setTextTranslated(event.target.value)}
             onBlur={handleSaveTranslated}
-            rows={10}
             placeholder={
               effectiveStatus === "translating"
                 ? "Translating…"
                 : "Click Translate or paste a manual translation."
             }
             disabled={effectiveStatus === "translating"}
-            className="font-mono text-xs"
+            className="h-96 max-h-96 min-h-48 resize-y overflow-y-auto font-mono text-xs"
           />
         </div>
       </div>

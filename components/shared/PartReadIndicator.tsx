@@ -1,14 +1,16 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { getPartReadStatus, type ReadStatus } from "@/lib/reader/progress";
+import {
+  getPartReadStatus,
+  PROGRESS_CHANGED_EVENT,
+  type ReadStatus,
+} from "@/lib/reader/progress";
 
 interface PartReadIndicatorProps {
   storyId: string;
   partNumber: number;
 }
-
-const SAME_TAB_EVENT = "qissa:progress-changed";
 
 function subscribe(listener: () => void): () => void {
   if (typeof window === "undefined") return () => {};
@@ -16,10 +18,10 @@ function subscribe(listener: () => void): () => void {
     if (event.key && event.key.startsWith("qissa:progress:")) listener();
   };
   window.addEventListener("storage", onStorage);
-  window.addEventListener(SAME_TAB_EVENT, listener);
+  window.addEventListener(PROGRESS_CHANGED_EVENT, listener);
   return () => {
     window.removeEventListener("storage", onStorage);
-    window.removeEventListener(SAME_TAB_EVENT, listener);
+    window.removeEventListener(PROGRESS_CHANGED_EVENT, listener);
   };
 }
 

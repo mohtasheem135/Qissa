@@ -5,12 +5,11 @@ import { StoryCard, type StoryCardData } from "@/components/shared/StoryCard";
 import { createClient } from "@/lib/supabase/client";
 import { getBookmarks, subscribeBookmarks } from "@/lib/reader/bookmarks";
 
-function emptyServerSnapshot(): string[] {
-  return [];
-}
-
 export default function BookmarksPage() {
-  const bookmarkIds = useSyncExternalStore(subscribeBookmarks, getBookmarks, emptyServerSnapshot);
+  // Both snapshots use getBookmarks — on the server it returns the same
+  // frozen EMPTY singleton, satisfying useSyncExternalStore's "same
+  // reference until data changes" contract.
+  const bookmarkIds = useSyncExternalStore(subscribeBookmarks, getBookmarks, getBookmarks);
   const [stories, setStories] = useState<StoryCardData[] | null>(null);
 
   useEffect(() => {

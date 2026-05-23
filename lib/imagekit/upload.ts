@@ -32,7 +32,7 @@ export interface UploadCoverInput {
   buffer: Buffer;
   /** Original filename — used as the upload's display name. */
   fileName: string;
-  /** Optional subfolder under /qissa/covers (e.g., a year for organization). */
+  /** Optional subfolder under /covers (e.g., a year for organization). */
   folder?: string;
 }
 
@@ -45,13 +45,23 @@ export interface UploadCoverResult {
 }
 
 /**
- * Upload a cover image. Returns the canonical URL (no transform params)
- * which we store in `stories.cover_image_url`. Display surfaces append
- * `?tr=w-400,h-225` etc. via the ImageKit URL builder.
+ * Upload a cover image to ImageKit.
+ *
+ * NOTE on folders: ImageKit composes `result.url = urlEndpoint + filePath`.
+ * If your endpoint is `https://ik.imagekit.io/<account>/qissa/` (with a
+ * "qissa" path prefix), uploading to folder `/qissa/covers/` produces a
+ * doubled `…/qissa/qissa/covers/…` URL that 404s.
+ *
+ * We upload to a flat `/covers` (overridable via NEXT_PUBLIC_IMAGEKIT_FOLDER
+ * env if you want something else). So:
+ *   endpoint `…/azadstudio/qissa/` + folder `/covers` -> `…/qissa/covers/file.jpg`  ✓
+ *   endpoint `…/azadstudio/`       + folder `/covers` -> `…/covers/file.jpg`        ✓
  */
+const DEFAULT_FOLDER = process.env.IMAGEKIT_UPLOAD_FOLDER ?? "/covers";
+
 export async function uploadCoverImage(input: UploadCoverInput): Promise<UploadCoverResult> {
   const ik = getImageKitClient();
-  const folder = input.folder ? `/qissa/covers/${input.folder}` : "/qissa/covers";
+  const folder = input.folder ? `${DEFAULT_FOLDER}/${input.folder}` : DEFAULT_FOLDER;
 
   const result = await ik.upload({
     file: input.buffer,

@@ -17,22 +17,16 @@ interface BookmarkButtonProps {
   withLabel?: boolean;
 }
 
-// SSR snapshot is always [] — the heart fills in after hydration without
-// causing a mismatch because the SSR HTML renders the empty state too.
-function emptyServerSnapshot(): string[] {
-  return [];
-}
-
 /**
  * Heart toggle backed by localStorage. Re-renders across tabs via the
  * `storage` event + same-tab CustomEvent (see lib/reader/bookmarks.ts).
+ *
+ * Both snapshots use `getBookmarks` — on the server it short-circuits to
+ * the same frozen EMPTY singleton, which is what useSyncExternalStore
+ * needs (same reference until the data really changes).
  */
 export function BookmarkButton({ storyId, className, withLabel = false }: BookmarkButtonProps) {
-  const bookmarks = useSyncExternalStore(
-    subscribeBookmarks,
-    getBookmarks,
-    emptyServerSnapshot,
-  );
+  const bookmarks = useSyncExternalStore(subscribeBookmarks, getBookmarks, getBookmarks);
   const isBookmarked = bookmarks.includes(storyId);
 
   function handleClick() {
