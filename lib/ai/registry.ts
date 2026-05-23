@@ -40,12 +40,15 @@ export const PROVIDERS: ReadonlyArray<ProviderMeta> = [
   {
     id: "openrouter",
     name: "OpenRouter",
-    defaultModel: "google/gemini-2.0-flash-exp:free",
+    defaultModel: "meta-llama/llama-3.3-70b-instruct:free",
     models: [
-      "google/gemini-2.0-flash-exp:free",
+      // Free tier (subject to OpenRouter's availability — they rotate slugs)
       "meta-llama/llama-3.3-70b-instruct:free",
+      "google/gemma-3-27b-it:free",
+      "deepseek/deepseek-chat-v3.1:free",
+      // Paid (any credit balance)
       "openai/gpt-4o-mini",
-      "anthropic/claude-3.5-sonnet",
+      "anthropic/claude-sonnet-4-5",
     ],
     envKey: "OPENROUTER_API_KEY",
     freeTier: "free models available",
@@ -85,4 +88,62 @@ export function isProviderConfigured(id: ProviderId): boolean {
 
 export function getConfiguredProviders(): ReadonlyArray<ProviderMeta> {
   return PROVIDERS.filter((p) => isProviderConfigured(p.id));
+}
+
+/**
+ * Lazy-instantiated provider factory.
+ *
+ * Returns the singleton instance of the requested provider, constructing
+ * it on first use. Construction reads the API key from env and throws
+ * ProviderError if it's missing — so calling getProvider('openai') on an
+ * env without OPENAI_API_KEY surfaces the configuration error immediately
+ * rather than at translate() time.
+ *
+ * To add a new provider:
+ *   1. Add an entry to PROVIDERS (id, name, defaultModel, models, envKey).
+ *   2. Add a new file in lib/ai/providers/<id>.ts implementing
+ *      TranslationProvider.
+ *   3. Add a `case` to the switch below.
+ *
+ * Imports are dynamic so a missing dependency in one provider's SDK
+ * doesn't break the others at module-load time.
+ */
+const PROVIDER_CACHE: Partial<Record<ProviderId, import("./types").TranslationProvider>> = {};
+
+export async function getProvider(id: ProviderId): Promise<import("./types").TranslationProvider> {
+  const cached = PROVIDER_CACHE[id];
+  if (cached) return cached;
+
+  const instance = await buildProvider(id);
+  PROVIDER_CACHE[id] = instance;
+  return instance;
+}
+
+async function buildProvider(id: ProviderId): Promise<import("./types").TranslationProvider> {
+  switch (id) {
+    case "gemini": {
+      const { GeminiProvider } = await import("./providers/gemini");
+      return new GeminiProvider();
+    }
+    case "groq": {
+      const { GroqProvider } = await import("./providers/groq");
+      return new GroqProvider();
+    }
+    case "openrouter": {
+      const { OpenRouterProvider } = await import("./providers/openrouter");
+      return new OpenRouterProvider();
+    }
+    case "openai": {
+      const { OpenAIProvider } = await import("./providers/openai");
+      return new OpenAIProvider();
+    }
+    case "anthropic": {
+      const { AnthropicProvider } = await import("./providers/anthropic");
+      return new AnthropicProvider();
+    }
+    default: {
+      const _exhaustive: never = id;
+      throw new Error(`Unhandled provider: ${String(_exhaustive)}`);
+    }
+  }
 }
