@@ -116,3 +116,16 @@
     -webkit-font-smoothing: antialiased;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Reader (Phase 9) — Focus theme dims non-active paragraphs.
+ * The ReaderBody applies data-theme on the article and data-focus="active"
+ * on the paragraph closest to the viewport centre.
+ * ------------------------------------------------------------------------- */
+.reader-article[data-theme="focus"] .reader-paragraph {
+  opacity: var(--reader-focus-dim, 0.25);
+  transition: opacity 200ms ease-out;
+}
+.reader-article[data-theme="focus"] .reader-paragraph[data-focus="active"] {
+  opacity: 1;
+}

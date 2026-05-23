@@ -44,10 +44,15 @@ const NAV_ITEMS: ReadonlyArray<{
  * - Top bar: brand on the left + nav links on md+ (hidden on mobile).
  * - Bottom nav: 4-icon dock, mobile-only (md:hidden).
  *
- * Phase 9 will auto-hide the bottom nav while inside the reader; today
- * the reader route doesn't exist yet so the nav is always shown.
+ * On /s/<id>/p/<n> we render *no* chrome — the reader has its own
+ * theme-aware top + bottom bars (ReaderChrome) that auto-hide.
  */
 export function PublicShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isReader = /^\/s\/[^/]+\/p\/\d+/.test(pathname);
+  if (isReader) {
+    return <main className="flex-1">{children}</main>;
+  }
   return (
     <>
       <TopBar />
