@@ -15,11 +15,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { saveCategory } from "@/lib/actions/categories";
 import {
   INITIAL_CATEGORY_FORM_STATE,
-  saveCategory,
   type CategoryFormState,
-} from "@/lib/actions/categories";
+} from "@/lib/actions/categories.types";
 import { toSlug } from "@/lib/utils/slug";
 
 export interface CategoryRow {

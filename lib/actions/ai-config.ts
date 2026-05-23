@@ -4,20 +4,9 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/check-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProviderMeta, type ProviderId } from "@/lib/ai/registry";
+import { INITIAL_AI_CONFIG_FORM_STATE, type AiConfigFormState } from "./ai-config.types";
 
 const AI_CONFIG_ID = "00000000-0000-0000-0000-000000000001";
-
-export type AiConfigFormState = {
-  error: string | null;
-  success: boolean;
-  savedAt: number;
-};
-
-export const INITIAL_AI_CONFIG_FORM_STATE: AiConfigFormState = {
-  error: null,
-  success: false,
-  savedAt: 0,
-};
 
 const KNOWN_PROVIDERS: ReadonlyArray<ProviderId> = [
   "gemini",

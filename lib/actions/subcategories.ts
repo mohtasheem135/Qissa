@@ -4,18 +4,10 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/check-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidSlug, toSlug } from "@/lib/utils/slug";
-
-export type SubcategoryFormState = {
-  error: string | null;
-  success: boolean;
-  savedAt: number;
-};
-
-export const INITIAL_SUBCATEGORY_FORM_STATE: SubcategoryFormState = {
-  error: null,
-  success: false,
-  savedAt: 0,
-};
+import {
+  INITIAL_SUBCATEGORY_FORM_STATE,
+  type SubcategoryFormState,
+} from "./subcategories.types";
 
 export async function saveSubcategory(
   _previousState: SubcategoryFormState,

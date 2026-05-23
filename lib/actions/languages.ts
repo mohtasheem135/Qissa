@@ -3,18 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/check-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
-
-export type LanguageFormState = {
-  error: string | null;
-  success: boolean;
-  savedAt: number;
-};
-
-export const INITIAL_LANGUAGE_FORM_STATE: LanguageFormState = {
-  error: null,
-  success: false,
-  savedAt: 0,
-};
+import { INITIAL_LANGUAGE_FORM_STATE, type LanguageFormState } from "./languages.types";
 
 const LANGUAGE_CODE_RE = /^[a-z]{2,3}(-[a-z]{2,4})?$/;
 

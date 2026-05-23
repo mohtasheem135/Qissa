@@ -4,19 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/check-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidSlug, toSlug } from "@/lib/utils/slug";
-
-export type CategoryFormState = {
-  error: string | null;
-  success: boolean;
-  /** Bumped on each successful save so the client can react via useEffect. */
-  savedAt: number;
-};
-
-export const INITIAL_CATEGORY_FORM_STATE: CategoryFormState = {
-  error: null,
-  success: false,
-  savedAt: 0,
-};
+import { INITIAL_CATEGORY_FORM_STATE, type CategoryFormState } from "./categories.types";
 
 /**
  * Create-or-update a category. The form sends `id` (uuid) for edits and

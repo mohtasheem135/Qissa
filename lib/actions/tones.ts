@@ -3,18 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/check-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
-
-export type ToneFormState = {
-  error: string | null;
-  success: boolean;
-  savedAt: number;
-};
-
-export const INITIAL_TONE_FORM_STATE: ToneFormState = {
-  error: null,
-  success: false,
-  savedAt: 0,
-};
+import { INITIAL_TONE_FORM_STATE, type ToneFormState } from "./tones.types";
 
 export async function saveTone(
   _previousState: ToneFormState,

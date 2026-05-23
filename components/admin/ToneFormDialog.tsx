@@ -22,7 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { INITIAL_TONE_FORM_STATE, saveTone, type ToneFormState } from "@/lib/actions/tones";
+import { saveTone } from "@/lib/actions/tones";
+import { INITIAL_TONE_FORM_STATE, type ToneFormState } from "@/lib/actions/tones.types";
 import { COMPLEXITY_LEVELS } from "@/lib/ai/complexity";
 
 export interface ToneRow {

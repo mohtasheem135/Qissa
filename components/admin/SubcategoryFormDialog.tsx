@@ -15,11 +15,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { saveSubcategory } from "@/lib/actions/subcategories";
 import {
   INITIAL_SUBCATEGORY_FORM_STATE,
-  saveSubcategory,
   type SubcategoryFormState,
-} from "@/lib/actions/subcategories";
+} from "@/lib/actions/subcategories.types";
 import { toSlug } from "@/lib/utils/slug";
 
 export interface SubcategoryRow {

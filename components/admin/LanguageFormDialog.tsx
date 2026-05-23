@@ -21,11 +21,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { saveLanguage } from "@/lib/actions/languages";
 import {
   INITIAL_LANGUAGE_FORM_STATE,
-  saveLanguage,
   type LanguageFormState,
-} from "@/lib/actions/languages";
+} from "@/lib/actions/languages.types";
 
 export interface LanguageRow {
   code: string;

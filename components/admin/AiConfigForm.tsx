@@ -14,11 +14,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { saveAiConfig } from "@/lib/actions/ai-config";
 import {
   INITIAL_AI_CONFIG_FORM_STATE,
-  saveAiConfig,
   type AiConfigFormState,
-} from "@/lib/actions/ai-config";
+} from "@/lib/actions/ai-config.types";
 import type { ProviderMeta } from "@/lib/ai/registry";
 
 interface AiConfigFormProps {
