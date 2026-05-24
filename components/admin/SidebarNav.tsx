@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils/cn";
 const NAV_ITEMS: Array<{ href: string; label: string }> = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/stories", label: "Stories" },
+  { href: "/admin/requests", label: "Requests" },
   { href: "/admin/categories", label: "Categories" },
   { href: "/admin/tones", label: "Tones" },
   { href: "/admin/languages", label: "Languages" },

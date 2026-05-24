@@ -1,8 +1,24 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { BookmarkButton } from "@/components/shared/BookmarkButton";
 import { ShareButton } from "@/components/shared/ShareButton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+export interface VariantOption {
+  slug: string;
+  label: string;
+  /** Highest part_number that exists in this variant; chrome routes to
+   *  min(currentPart, max) when switching to avoid 404s. */
+  totalParts: number;
+}
 
 interface ReaderChromeProps {
   visible: boolean;
@@ -13,6 +29,9 @@ interface ReaderChromeProps {
   prevHref: string | null;
   nextHref: string | null;
   onOpenSettings: () => void;
+  /** All published variants of the story (incl. current). */
+  variants: ReadonlyArray<VariantOption>;
+  currentVariantSlug: string;
 }
 
 /**
@@ -21,6 +40,10 @@ interface ReaderChromeProps {
  *
  * Colours come from CSS custom properties set by themeStyle() so the
  * chrome always contrasts with the current theme's background.
+ *
+ * Variant picker in the top bar lets the reader hop between translations
+ * of the same story without losing their place (lands on the same part_number,
+ * clamped to the target variant's part count).
  */
 export function ReaderChrome({
   visible,
@@ -31,10 +54,20 @@ export function ReaderChrome({
   prevHref,
   nextHref,
   onOpenSettings,
+  variants,
+  currentVariantSlug,
 }: ReaderChromeProps) {
+  const router = useRouter();
   const fadeClass = visible
     ? "opacity-100 translate-y-0"
     : "pointer-events-none opacity-0";
+
+  function handleVariantChange(slug: string) {
+    if (slug === currentVariantSlug) return;
+    const target = variants.find((v) => v.slug === slug);
+    const part = Math.min(partNumber, target?.totalParts ?? partNumber);
+    router.push(`/s/${storyId}/${slug}/p/${part}`);
+  }
 
   return (
     <>
@@ -58,6 +91,26 @@ export function ReaderChrome({
           >
             <ChevronLeftIcon />
           </Link>
+
+          {variants.length > 1 ? (
+            <Select value={currentVariantSlug} onValueChange={handleVariantChange}>
+              <SelectTrigger
+                size="sm"
+                aria-label="Switch translation variant"
+                className="h-8 max-w-[180px] border-0 bg-transparent text-xs hover:bg-black/5 dark:hover:bg-white/5"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {variants.map((v) => (
+                  <SelectItem key={v.slug} value={v.slug}>
+                    {v.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
+
           <div className="min-w-0 flex-1 text-center">
             <p
               className="truncate text-xs uppercase tracking-wide"

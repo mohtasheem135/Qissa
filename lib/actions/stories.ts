@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/check-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { wordCount } from "@/lib/utils/word-count";
+import { composeVariantSlug } from "@/lib/variants/url";
 import {
   INITIAL_STORY_EDIT_FORM_STATE,
   INITIAL_STORY_FORM_STATE,
@@ -12,8 +13,8 @@ import {
 } from "./stories.types";
 
 const COMPLEXITY_VALUES = ["daily", "simple", "standard", "advanced", "scholarly"] as const;
+type Complexity = (typeof COMPLEXITY_VALUES)[number];
 const STATUS_VALUES = ["draft", "published"] as const;
-const READING_WPM = 200;
 
 interface ParsedPart {
   label: string | null;
@@ -42,9 +43,15 @@ function readParts(formData: FormData): ParsedPart[] {
 }
 
 /**
- * Create a story plus its parts in one round-trip. The form lives at
- * /admin/stories/new — on success we return createdStoryId so the client
- * can redirect to the edit page.
+ * Create a story (source-only fields) plus its parts plus, optionally, one
+ * initial variant. The form lives at /admin/stories/new — on success we
+ * return createdStoryId so the client can redirect to the edit page where
+ * the variant's translation queue can be started.
+ *
+ * Per-variant fields (target_language, tone, complexity, provider, model,
+ * custom_instructions, title_translated) live on story_variants now and are
+ * grouped into the optional firstVariant block of the form. If supplied,
+ * one variant + N pending story_part_translations are inserted alongside.
  */
 export async function createStory(
   _previousState: StoryFormState,
@@ -53,22 +60,26 @@ export async function createStory(
   await requireAdmin();
 
   const titleOriginal = (formData.get("title_original")?.toString() ?? "").trim();
-  const titleTranslated =
-    (formData.get("title_translated")?.toString() ?? "").trim() || null;
   const authorOriginal =
     (formData.get("author_original")?.toString() ?? "").trim() || null;
   const sourceUrl = (formData.get("source_url")?.toString() ?? "").trim() || null;
   const coverImageUrl =
     (formData.get("cover_image_url")?.toString() ?? "").trim() || null;
   const subcategoryId = (formData.get("subcategory_id")?.toString() ?? "").trim();
+  const statusRaw = (formData.get("status")?.toString() ?? "draft").trim();
+
+  // First variant (optional). Empty values mean "don't seed a variant yet".
   const targetLanguage = (formData.get("target_language")?.toString() ?? "").trim().toLowerCase();
   const toneId = (formData.get("tone_id")?.toString() ?? "").trim();
-  const complexityRaw = (formData.get("complexity")?.toString() ?? "").trim();
+  const complexityRaw = (formData.get("complexity")?.toString() ?? "standard").trim();
   const aiProvider = (formData.get("ai_provider")?.toString() ?? "").trim() || null;
   const aiModel = (formData.get("ai_model")?.toString() ?? "").trim() || null;
   const customInstructions =
     (formData.get("custom_instructions")?.toString() ?? "").trim() || null;
-  const statusRaw = (formData.get("status")?.toString() ?? "draft").trim();
+  const titleTranslated =
+    (formData.get("title_translated")?.toString() ?? "").trim() || null;
+
+  const wantsVariant = Boolean(targetLanguage && toneId);
 
   if (!titleOriginal) {
     return { ...INITIAL_STORY_FORM_STATE, error: "Title is required." };
@@ -76,17 +87,17 @@ export async function createStory(
   if (!subcategoryId) {
     return { ...INITIAL_STORY_FORM_STATE, error: "Subcategory is required." };
   }
-  if (!targetLanguage) {
-    return { ...INITIAL_STORY_FORM_STATE, error: "Target language is required." };
-  }
-  if (!toneId) {
-    return { ...INITIAL_STORY_FORM_STATE, error: "Tone is required." };
-  }
-  if (!(COMPLEXITY_VALUES as ReadonlyArray<string>).includes(complexityRaw)) {
-    return { ...INITIAL_STORY_FORM_STATE, error: "Invalid complexity." };
-  }
   if (!(STATUS_VALUES as ReadonlyArray<string>).includes(statusRaw)) {
     return { ...INITIAL_STORY_FORM_STATE, error: "Invalid status." };
+  }
+  if (wantsVariant && !(COMPLEXITY_VALUES as ReadonlyArray<string>).includes(complexityRaw)) {
+    return { ...INITIAL_STORY_FORM_STATE, error: "Invalid complexity." };
+  }
+  if ((targetLanguage && !toneId) || (toneId && !targetLanguage)) {
+    return {
+      ...INITIAL_STORY_FORM_STATE,
+      error: "Pick both target language and tone, or leave both blank to skip the first variant.",
+    };
   }
 
   const parts = readParts(formData);
@@ -102,26 +113,18 @@ export async function createStory(
 
   const admin = createAdminClient();
 
-  // 1) Insert the story.
+  // 1) Insert the source story.
   const { data: story, error: insertErr } = await admin
     .from("stories")
     .insert({
       subcategory_id: subcategoryId,
-      target_language: targetLanguage,
-      tone_id: toneId,
-      complexity: complexityRaw as (typeof COMPLEXITY_VALUES)[number],
       title_original: titleOriginal,
-      title_translated: titleTranslated,
       author_original: authorOriginal,
       source_url: sourceUrl,
       cover_image_url: coverImageUrl,
-      ai_provider: aiProvider,
-      ai_model: aiModel,
-      custom_instructions: customInstructions,
       status,
       total_parts: parts.length,
       total_words_original: totalWordsOriginal,
-      estimated_reading_minutes: Math.max(1, Math.ceil(totalWordsOriginal / READING_WPM)),
       published_at: status === "published" ? new Date().toISOString() : null,
     })
     .select("id")
@@ -143,14 +146,70 @@ export async function createStory(
     word_count_original: wordCount(p.text),
   }));
 
-  const { error: partsErr } = await admin.from("story_parts").insert(partRows);
-  if (partsErr) {
+  const { data: insertedParts, error: partsErr } = await admin
+    .from("story_parts")
+    .insert(partRows)
+    .select("id");
+  if (partsErr || !insertedParts) {
     // Best-effort rollback so we don't leave an orphaned story.
     await admin.from("stories").delete().eq("id", story.id);
     return {
       ...INITIAL_STORY_FORM_STATE,
-      error: `Story rolled back — could not save parts: ${partsErr.message}`,
+      error: `Story rolled back — could not save parts: ${partsErr?.message ?? "unknown"}`,
     };
+  }
+
+  // 3) Optionally seed the first variant + its pending translations.
+  if (wantsVariant) {
+    const { data: tone } = await admin
+      .from("tones")
+      .select("name")
+      .eq("id", toneId)
+      .single();
+    const slug = composeVariantSlug(targetLanguage, tone?.name ?? targetLanguage);
+
+    const { data: variant, error: vErr } = await admin
+      .from("story_variants")
+      .insert({
+        story_id: story.id,
+        target_language: targetLanguage,
+        tone_id: toneId,
+        slug,
+        complexity: complexityRaw as Complexity,
+        title_translated: titleTranslated,
+        custom_instructions: customInstructions,
+        ai_provider: aiProvider,
+        ai_model: aiModel,
+        status,
+        is_primary: true,
+        published_at: status === "published" ? new Date().toISOString() : null,
+      })
+      .select("id")
+      .single();
+
+    if (vErr || !variant) {
+      await admin.from("stories").delete().eq("id", story.id);
+      return {
+        ...INITIAL_STORY_FORM_STATE,
+        error: `Story rolled back — could not create first variant: ${vErr?.message ?? "unknown"}`,
+      };
+    }
+
+    const translationRows = insertedParts.map((p) => ({
+      variant_id: variant.id,
+      story_part_id: p.id,
+      status: "pending" as const,
+    }));
+    const { error: trErr } = await admin
+      .from("story_part_translations")
+      .insert(translationRows);
+    if (trErr) {
+      await admin.from("stories").delete().eq("id", story.id);
+      return {
+        ...INITIAL_STORY_FORM_STATE,
+        error: `Story rolled back — could not seed translations: ${trErr.message}`,
+      };
+    }
   }
 
   revalidatePath("/admin/stories");
@@ -158,23 +217,16 @@ export async function createStory(
 }
 
 /**
- * Save metadata changes from the edit page (title, author, language, tone, etc).
- * Returns void; the edit page uses optimistic UI + a sonner toast.
+ * Edit (metadata-only) update of a source story. Per-variant fields live on
+ * story_variants and are edited via story-variants actions.
  */
 export interface UpdateStoryMetadataInput {
   id: string;
   title_original?: string;
-  title_translated?: string | null;
   author_original?: string | null;
   source_url?: string | null;
   cover_image_url?: string | null;
   subcategory_id?: string;
-  target_language?: string;
-  tone_id?: string;
-  complexity?: (typeof COMPLEXITY_VALUES)[number];
-  ai_provider?: string | null;
-  ai_model?: string | null;
-  custom_instructions?: string | null;
 }
 
 export async function updateStoryMetadata(input: UpdateStoryMetadataInput): Promise<void> {
@@ -189,8 +241,7 @@ export async function updateStoryMetadata(input: UpdateStoryMetadataInput): Prom
 
 /**
  * FormData wrapper around updateStoryMetadata for use with React 19's
- * useActionState in the EditStoryMetadataDialog. Mirrors createStory's
- * field validation; required fields are all required on edit too.
+ * useActionState in the EditStoryMetadataDialog.
  */
 export async function updateStoryFromForm(
   _previousState: StoryEditFormState,
@@ -202,21 +253,12 @@ export async function updateStoryFromForm(
   if (!id) return { ...INITIAL_STORY_EDIT_FORM_STATE, error: "Missing story id." };
 
   const titleOriginal = (formData.get("title_original")?.toString() ?? "").trim();
-  const titleTranslated =
-    (formData.get("title_translated")?.toString() ?? "").trim() || null;
   const authorOriginal =
     (formData.get("author_original")?.toString() ?? "").trim() || null;
   const sourceUrl = (formData.get("source_url")?.toString() ?? "").trim() || null;
   const coverImageUrl =
     (formData.get("cover_image_url")?.toString() ?? "").trim() || null;
   const subcategoryId = (formData.get("subcategory_id")?.toString() ?? "").trim();
-  const targetLanguage = (formData.get("target_language")?.toString() ?? "").trim().toLowerCase();
-  const toneId = (formData.get("tone_id")?.toString() ?? "").trim();
-  const complexityRaw = (formData.get("complexity")?.toString() ?? "").trim();
-  const aiProvider = (formData.get("ai_provider")?.toString() ?? "").trim() || null;
-  const aiModel = (formData.get("ai_model")?.toString() ?? "").trim() || null;
-  const customInstructions =
-    (formData.get("custom_instructions")?.toString() ?? "").trim() || null;
 
   if (!titleOriginal) {
     return { ...INITIAL_STORY_EDIT_FORM_STATE, error: "Title is required." };
@@ -224,32 +266,16 @@ export async function updateStoryFromForm(
   if (!subcategoryId) {
     return { ...INITIAL_STORY_EDIT_FORM_STATE, error: "Subcategory is required." };
   }
-  if (!targetLanguage) {
-    return { ...INITIAL_STORY_EDIT_FORM_STATE, error: "Target language is required." };
-  }
-  if (!toneId) {
-    return { ...INITIAL_STORY_EDIT_FORM_STATE, error: "Tone is required." };
-  }
-  if (!(COMPLEXITY_VALUES as ReadonlyArray<string>).includes(complexityRaw)) {
-    return { ...INITIAL_STORY_EDIT_FORM_STATE, error: "Invalid complexity." };
-  }
 
   const admin = createAdminClient();
   const { error } = await admin
     .from("stories")
     .update({
       title_original: titleOriginal,
-      title_translated: titleTranslated,
       author_original: authorOriginal,
       source_url: sourceUrl,
       cover_image_url: coverImageUrl,
       subcategory_id: subcategoryId,
-      target_language: targetLanguage,
-      tone_id: toneId,
-      complexity: complexityRaw as (typeof COMPLEXITY_VALUES)[number],
-      ai_provider: aiProvider,
-      ai_model: aiModel,
-      custom_instructions: customInstructions,
     })
     .eq("id", id);
 

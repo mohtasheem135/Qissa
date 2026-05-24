@@ -98,9 +98,10 @@ Then run `npm run typecheck` to catch any references to renamed/dropped columns.
 
 | File | Purpose |
 |---|---|
-| [`20260522120001_initial.sql`](../supabase/migrations/20260522120001_initial.sql) | All 9 tables, triggers, indexes, extensions |
+| [`20260522120001_initial.sql`](../supabase/migrations/20260522120001_initial.sql) | All 9 original tables, triggers, indexes, extensions |
 | [`20260522120002_rls_policies.sql`](../supabase/migrations/20260522120002_rls_policies.sql) | Enable RLS on all tables + public read policies |
 | [`20260522120003_seed_initial_data.sql`](../supabase/migrations/20260522120003_seed_initial_data.sql) | 13 languages, 28 tones, `ai_config` singleton — idempotent |
+| [`20260524120000_variants_and_requests.sql`](../supabase/migrations/20260524120000_variants_and_requests.sql) | **Multi-variant translations** (`story_variants`, `story_part_translations`) + **reader requests** (`story_requests`, `story_request_votes`). Reshapes `stories` + `story_parts` to remove per-variant fields; backfills one primary variant per existing story before the column drops. See §4.10–§4.13. |
 
 ---
 
@@ -212,86 +213,76 @@ Writer-style presets per language. The `prompt_fragment` is the most important f
 
 ### 4.5 `stories`
 
-The metadata of one story.
+The source story's metadata. **As of the 2026-05-24 variants migration, all per-variant fields (target_language, tone_id, complexity, ai_provider, ai_model, custom_instructions, title_translated, total_words_translated, estimated_reading_minutes) moved to [`story_variants`](#410-story_variants).** The table below reflects the post-migration shape.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` PK | |
 | `subcategory_id` | `uuid` NOT NULL → `subcategories(id) ON DELETE RESTRICT` | |
-| `target_language` | `text` NOT NULL → `languages(code) ON DELETE RESTRICT` | |
-| `tone_id` | `uuid` NOT NULL → `tones(id) ON DELETE RESTRICT` | |
-| `complexity` | `text` NOT NULL default `'standard'` | `CHECK in ('daily','simple','standard','advanced','scholarly')` — see requirements §3.5 |
-| `title_original` | `text` NOT NULL | |
-| `title_translated` | `text` | Filled after translation; admin-editable |
+| `title_original` | `text` NOT NULL | The source title (variant-translated titles live on `story_variants.title_translated`) |
 | `author_original` | `text` | |
 | `source_url` | `text` | Where the original came from |
 | `cover_image_url` | `text` | ImageKit URL |
-| `ai_provider` | `text` | Snapshot of provider used at last translate |
-| `ai_model` | `text` | Snapshot of model used at last translate |
-| `custom_instructions` | `text` | Extra prompt text per story |
-| `status` | `text` NOT NULL default `'draft'` | `CHECK in ('draft','published')` |
+| `status` | `text` NOT NULL default `'draft'` | `CHECK in ('draft','published')` — story-level publish; each variant has its own publish flag too |
 | `is_active` | `boolean` default true | Soft delete |
 | `total_parts` | `int` default 0 | Maintained server-side on part insert/delete |
 | `total_words_original` | `int` default 0 | Cached for the listing UI |
-| `total_words_translated` | `int` default 0 | |
 | `estimated_reading_minutes` | `int` | Computed (~200 wpm) |
 | `created_at`, `updated_at`, `published_at` | `timestamptz` | `published_at` set when status flips to `published` |
 
 **Indexes:**
 - `stories_published_idx (status, is_active, published_at desc)` — home page "Recently Published"
 - `stories_subcategory_idx (subcategory_id)` — subcategory listing
-- `stories_target_language_idx (target_language)` — language filter
-- `stories_tone_idx (tone_id)` — tone filter
-- `stories_title_original_trgm` / `stories_title_translated_trgm` — pg_trgm GIN, powers Phase 8 search
+- `stories_title_original_trgm` — pg_trgm GIN, powers search on original titles (per-variant translated-title search is deferred — see [search page](../app/(public)/search/page.tsx))
 
-**FKs:** All three references use `ON DELETE RESTRICT` so you can't accidentally delete a subcategory/language/tone that has stories pointing at it.
+**FKs:** `subcategory_id` uses `ON DELETE RESTRICT` so you can't accidentally delete a subcategory that has stories pointing at it. Per-variant language/tone references live on `story_variants`.
 
 ---
 
 ### 4.6 `story_parts`
 
-One row per part of a story. The translation primary unit.
+One row per **source** part of a story — original text only. Translated text + per-translation status live on `story_part_translations`, one row per (variant × part).
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` PK | |
-| `story_id` | `uuid` NOT NULL → `stories(id) ON DELETE CASCADE` | Deleting a story deletes its parts |
+| `story_id` | `uuid` NOT NULL → `stories(id) ON DELETE CASCADE` | Deleting a story deletes its parts (and every variant's translations of them, cascading further) |
 | `part_number` | `int` NOT NULL | `CHECK > 0`; **UNIQUE per story** via `(story_id, part_number)` |
 | `part_label` | `text` | Editable label, defaults to `"Part N"` in UI |
-| `text_original` | `text` NOT NULL | Source paragraph(s); paragraph breaks preserved |
-| `text_translated` | `text` | Filled by AI |
-| `status` | `text` NOT NULL default `'pending'` | `CHECK in ('pending','translating','completed','edited','failed')` — drives the per-part badge in the admin |
-| `error_message` | `text` | Last error if `status = 'failed'` |
-| `last_provider_used` | `text` | Snapshot for the admin's "Provider used" column |
-| `last_model_used` | `text` | |
+| `text_original` | `text` NOT NULL | Source paragraph(s); paragraph breaks preserved; shared across every variant |
 | `word_count_original` | `int` default 0 | |
-| `word_count_translated` | `int` default 0 | |
 | `created_at`, `updated_at` | `timestamptz` | |
 
 **Indexes:** `story_parts_story_idx (story_id, part_number)` — ordered fetch for the reader.
+
+> **Migration note (2026-05-24):** `text_translated`, `status`, `error_message`, `last_provider_used`, `last_model_used`, `word_count_translated` all moved to [`story_part_translations`](#411-story_part_translations). The backfill creates one translation row per existing part for each story's backfilled primary variant.
 
 ---
 
 ### 4.7 `story_part_versions`
 
-Translation history per part. Every re-translate OR admin edit writes a new row before the part itself is updated.
+Translation history per (variant × part). Every re-translate OR admin edit writes a new row before the underlying `story_part_translations` row is updated.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` PK | |
-| `story_part_id` | `uuid` NOT NULL → `story_parts(id) ON DELETE CASCADE` | |
-| `version_number` | `int` NOT NULL | `CHECK > 0`; **UNIQUE per part** via `(story_part_id, version_number)` — server-side increment |
+| `story_part_translation_id` | `uuid` NOT NULL → `story_part_translations(id) ON DELETE CASCADE` | The (variant, part) translation this version belongs to |
+| `variant_id` | `uuid` NOT NULL → `story_variants(id) ON DELETE CASCADE` | Denormalized for quick filtering |
+| `story_part_id` | `uuid` NOT NULL → `story_parts(id) ON DELETE CASCADE` | Kept for query convenience |
+| `version_number` | `int` NOT NULL | `CHECK > 0`; **UNIQUE per translation** via `(story_part_translation_id, version_number)` — server-side increment |
 | `translated_text` | `text` NOT NULL | Snapshot |
-| `provider_used`, `model_used` | `text` | Snapshots of `ai_provider` / `ai_model` at time of translation |
+| `provider_used`, `model_used` | `text` | Snapshots at time of translation |
 | `tone_id` | `uuid` → `tones(id) ON DELETE SET NULL` | Tones can be deleted later; history must not break |
 | `complexity` | `text` | Snapshot |
 | `custom_instructions` | `text` | Snapshot |
 | `created_by` | `text` NOT NULL | `CHECK in ('ai','admin')` |
 | `created_at` | `timestamptz` | |
 
-**Indexes:** `story_part_versions_part_idx (story_part_id, version_number desc)` — powers the version-history modal.
+**Indexes:** `story_part_versions_translation_idx (story_part_translation_id, version_number desc)` — powers the version-history modal.
 
 **RLS:** **No public policy.** Admin-only via service role.
+
+> **Migration note (2026-05-24):** Old `(story_part_id, version_number)` unique constraint was dropped — versioning is now scoped per translation row, so two variants of the same source part keep independent version timelines.
 
 ---
 
@@ -320,6 +311,8 @@ Per-attempt log for debugging, retries, and future cost tracking.
 |---|---|---|
 | `id` | `uuid` PK | |
 | `story_part_id` | `uuid` NOT NULL → `story_parts(id) ON DELETE CASCADE` | |
+| `variant_id` | `uuid` NOT NULL → `story_variants(id) ON DELETE CASCADE` | Which variant the attempt was for |
+| `story_part_translation_id` | `uuid` NOT NULL → `story_part_translations(id) ON DELETE CASCADE` | The exact translation row touched |
 | `attempt_number` | `int` NOT NULL default 1 | 1, 2, 3 (we cap at 3 with exponential backoff) |
 | `status` | `text` NOT NULL | `CHECK in ('started','succeeded','failed')` |
 | `provider`, `model` | `text` | Snapshot |
@@ -328,9 +321,111 @@ Per-attempt log for debugging, retries, and future cost tracking.
 | `error_message` | `text` | On `failed` |
 | `created_at` | `timestamptz` | |
 
-**Indexes:** `translation_jobs_part_idx (story_part_id, created_at desc)` — recent attempts first.
+**Indexes:**
+- `translation_jobs_part_idx (story_part_id, created_at desc)` — recent attempts per source part
+- `translation_jobs_translation_idx (story_part_translation_id, created_at desc)` — recent attempts per (variant × part)
 
 **RLS:** No public policy — admin-only via service role.
+
+---
+
+### 4.10 `story_variants`
+
+One row per `(story, target_language, tone)` combination. Each variant is independently translatable, publishable, and reader-selectable. The reader URL is `/s/<storyId>/<slug>/p/<partNumber>`.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` PK | |
+| `story_id` | `uuid` NOT NULL → `stories(id) ON DELETE CASCADE` | |
+| `target_language` | `text` NOT NULL → `languages(code) ON DELETE RESTRICT` | |
+| `tone_id` | `uuid` NOT NULL → `tones(id) ON DELETE RESTRICT` | |
+| `slug` | `text` NOT NULL | URL slug, e.g. `hi-premchand`; **UNIQUE per story** via `(story_id, slug)` |
+| `complexity` | `text` NOT NULL default `'standard'` | `CHECK in ('daily','simple','standard','advanced','scholarly')` |
+| `title_translated` | `text` | Per-variant translated title |
+| `custom_instructions` | `text` | Extra prompt text |
+| `ai_provider`, `ai_model` | `text` | Provider/model the queue should use for new translates |
+| `status` | `text` NOT NULL default `'draft'` | `CHECK in ('draft','published')` |
+| `is_active` | `boolean` default true | Soft delete |
+| `is_primary` | `boolean` default false | The variant the story landing's "Start reading" button points at; **partial UNIQUE index** ensures at most one primary per story |
+| `total_words_translated` | `int` default 0 | |
+| `estimated_reading_minutes` | `int` | Computed from word count |
+| `created_at`, `updated_at`, `published_at` | `timestamptz` | |
+
+**Unique:** `(story_id, target_language, tone_id)` and `(story_id, slug)`.
+
+**Indexes:** `story_variants_story_active_idx`, `story_variants_published_idx`, `story_variants_target_language_idx`, `story_variants_tone_idx`.
+
+**RLS:** Anon can SELECT rows where `status='published' AND is_active=true AND` the parent story is published+active.
+
+---
+
+### 4.11 `story_part_translations`
+
+One row per `(variant, story_part)` — the actual translated text plus its per-variant lifecycle (status, provider/model used, last error). The reader fetches one of these joined to its `story_part` for the original text.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` PK | |
+| `variant_id` | `uuid` NOT NULL → `story_variants(id) ON DELETE CASCADE` | |
+| `story_part_id` | `uuid` NOT NULL → `story_parts(id) ON DELETE CASCADE` | |
+| `text` | `text` | Filled by AI / admin edit |
+| `status` | `text` NOT NULL default `'pending'` | `CHECK in ('pending','translating','completed','edited','failed')` |
+| `word_count` | `int` default 0 | |
+| `ai_provider`, `ai_model` | `text` | Snapshot from the last translate attempt |
+| `error_message` | `text` | Last error if `status='failed'` |
+| `translated_at` | `timestamptz` | Set when `status` transitions to `completed`/`edited` |
+| `created_at`, `updated_at` | `timestamptz` | |
+
+**Unique:** `(variant_id, story_part_id)` — exactly one translation per (variant, part).
+
+**Indexes:** `story_part_translations_variant_status_idx`, `story_part_translations_part_idx`.
+
+**RLS:** Anon can SELECT rows whose variant is published+active and whose parent story is published+active.
+
+---
+
+### 4.12 `story_requests`
+
+Reader-submitted requests for a new story OR a new variant of an existing story. Created via `POST /api/requests` (anon, honeypot+rate-limited); managed in the admin `/admin/requests` triage queue.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` PK | |
+| `type` | `text` NOT NULL | `CHECK in ('new_story','new_variant')` |
+| `story_id` | `uuid` → `stories(id) ON DELETE CASCADE` | Required when `type='new_variant'` |
+| `requested_title` | `text` | Required when `type='new_story'` |
+| `requested_author` | `text` | |
+| `target_language` | `text` → `languages(code) ON DELETE SET NULL` | |
+| `tone_id` | `uuid` → `tones(id) ON DELETE SET NULL` | |
+| `notes` | `text` | Free-text from the requester |
+| `requester_email` | `text` | Optional |
+| `votes` | `int` NOT NULL default 1 | Bumped by dedupe + `/api/requests/[id]/vote` |
+| `status` | `text` NOT NULL default `'open'` | `CHECK in ('open','planned','in_progress','fulfilled','declined')` |
+| `fulfilled_variant_id` | `uuid` → `story_variants(id) ON DELETE SET NULL` | Set when admin links the fulfilling variant |
+| `admin_notes` | `text` | Internal triage notes |
+| `created_at`, `updated_at` | `timestamptz` | |
+
+**Check constraint:** either `type='new_variant'` with `story_id` set, or `type='new_story'` with `requested_title` set.
+
+**Indexes:** `story_requests_status_created_idx`, `story_requests_votes_idx`, `story_requests_dedup_idx (story_id, target_language, tone_id)`.
+
+**RLS:** **No anon policies** — all reads and inserts go through service-role-backed API routes ([app/api/requests/route.ts](../app/api/requests/route.ts)) so abuse prevention (honeypot, rate-limit, dedupe) stays centralized.
+
+---
+
+### 4.13 `story_request_votes`
+
+Per-IP upvote dedupe table for `story_requests`. The voter is identified by `sha256(ip + salt)` — coarse but enough to stop trivial repeat-clicks.
+
+| Column | Type | Notes |
+|---|---|---|
+| `request_id` | `uuid` NOT NULL → `story_requests(id) ON DELETE CASCADE` | |
+| `voter_hash` | `text` NOT NULL | |
+| `created_at` | `timestamptz` | |
+
+**PK:** `(request_id, voter_hash)` — duplicate vote attempts trip the unique error, which the API handler converts to `{ ok: true, alreadyVoted: true }`.
+
+**RLS:** No anon policies — gated through `/api/requests/[id]/vote`.
 
 ---
 

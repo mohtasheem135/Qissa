@@ -28,28 +28,39 @@ export default function BookmarksPage() {
     supabase
       .from("stories")
       .select(
-        `id, title_original, title_translated, cover_image_url, total_parts,
-         estimated_reading_minutes,
-         language:languages!inner ( name_english, font_family, font_family_reading ),
-         tone:tones!inner ( name )`,
+        `id, title_original, cover_image_url, total_parts,
+         variants:story_variants!inner (
+           slug, title_translated, estimated_reading_minutes, is_primary,
+           language:languages!inner ( name_english, font_family, font_family_reading ),
+           tone:tones!inner ( name )
+         )`,
       )
       .in("id", bookmarkIds)
       .eq("status", "published")
       .eq("is_active", true)
+      .eq("variants.status", "published")
+      .eq("variants.is_active", true)
       .then(({ data }) => {
         if (cancelled) return;
-        const next: StoryCardData[] = (data ?? []).map((row) => ({
-          id: row.id,
-          title_original: row.title_original,
-          title_translated: row.title_translated,
-          cover_image_url: row.cover_image_url,
-          total_parts: row.total_parts,
-          estimated_reading_minutes: row.estimated_reading_minutes,
-          language_name_english: row.language?.name_english ?? "",
-          language_font_family: row.language?.font_family ?? null,
-          language_font_family_reading: row.language?.font_family_reading ?? null,
-          tone_name: row.tone?.name ?? null,
-        }));
+        const next: StoryCardData[] = [];
+        for (const row of data ?? []) {
+          const variants = row.variants ?? [];
+          if (variants.length === 0) continue;
+          const variant = variants.find((v) => v.is_primary) ?? variants[0];
+          next.push({
+            id: row.id,
+            variant_slug: variant.slug,
+            title_original: row.title_original,
+            title_translated: variant.title_translated,
+            cover_image_url: row.cover_image_url,
+            total_parts: row.total_parts,
+            estimated_reading_minutes: variant.estimated_reading_minutes,
+            language_name_english: variant.language?.name_english ?? "",
+            language_font_family: variant.language?.font_family ?? null,
+            language_font_family_reading: variant.language?.font_family_reading ?? null,
+            tone_name: variant.tone?.name ?? null,
+          });
+        }
         // Preserve the order in which the user bookmarked them.
         next.sort(
           (a, b) => bookmarkIds.indexOf(a.id) - bookmarkIds.indexOf(b.id),

@@ -25,17 +25,18 @@ export interface VersionRow {
 }
 
 interface VersionHistoryDialogProps {
-  partId: string;
+  /** The story_part_translations row this history is for. */
+  translationId: string;
   versions: ReadonlyArray<VersionRow>;
 }
 
-export function VersionHistoryDialog({ partId, versions }: VersionHistoryDialogProps) {
+export function VersionHistoryDialog({ translationId, versions }: VersionHistoryDialogProps) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   function handleRestore(versionId: string) {
     startTransition(async () => {
-      const result = await restorePartVersion(partId, versionId);
+      const result = await restorePartVersion(translationId, versionId);
       if (result.error) {
         toast.error(result.error);
       } else {

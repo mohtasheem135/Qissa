@@ -1,14 +1,12 @@
 /**
  * Reading progress + last-read tracking, in localStorage.
  *
- * Per-part progress lives at  qissa:progress:<storyId>:<partNumber>  as
- * { scroll: 0..1, updatedAt: ISO string }. A single pointer
- * qissa:last-read holds the most recent story+part for "Continue
- * Reading" on the home page.
+ * Variant-aware: each (story, variant, part) tracks its own scroll. Switching
+ * variants of the same story does NOT carry progress over.
  *
- * The full save-every-5-seconds + scroll restore logic ships in
- * Phase 9. Phase 8 only needs the *read-status* helpers (so the parts
- * list can show ✓ / partial / — icons) and getLastRead() for the home.
+ * Keys:
+ *   qissa:progress:<storyId>:<variantSlug>:<partNumber>  -> PartProgress
+ *   qissa:last-read                                       -> LastRead
  */
 
 const PROGRESS_PREFIX = "qissa:progress:";
@@ -21,6 +19,7 @@ export interface PartProgress {
 
 export interface LastRead {
   storyId: string;
+  variantSlug: string;
   partNumber: number;
   updatedAt: string;
 }
@@ -29,14 +28,18 @@ export type ReadStatus = "unread" | "in-progress" | "read";
 
 const READ_THRESHOLD = 0.95;
 
-function progressKey(storyId: string, partNumber: number): string {
-  return `${PROGRESS_PREFIX}${storyId}:${partNumber}`;
+function progressKey(storyId: string, variantSlug: string, partNumber: number): string {
+  return `${PROGRESS_PREFIX}${storyId}:${variantSlug}:${partNumber}`;
 }
 
-export function getPartProgress(storyId: string, partNumber: number): PartProgress | null {
+export function getPartProgress(
+  storyId: string,
+  variantSlug: string,
+  partNumber: number,
+): PartProgress | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(progressKey(storyId, partNumber));
+    const raw = window.localStorage.getItem(progressKey(storyId, variantSlug, partNumber));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
     if (
@@ -53,8 +56,12 @@ export function getPartProgress(storyId: string, partNumber: number): PartProgre
   }
 }
 
-export function getPartReadStatus(storyId: string, partNumber: number): ReadStatus {
-  const progress = getPartProgress(storyId, partNumber);
+export function getPartReadStatus(
+  storyId: string,
+  variantSlug: string,
+  partNumber: number,
+): ReadStatus {
+  const progress = getPartProgress(storyId, variantSlug, partNumber);
   if (!progress) return "unread";
   if (progress.scroll >= READ_THRESHOLD) return "read";
   if (progress.scroll > 0.02) return "in-progress";
@@ -63,6 +70,7 @@ export function getPartReadStatus(storyId: string, partNumber: number): ReadStat
 
 export function savePartProgress(
   storyId: string,
+  variantSlug: string,
   partNumber: number,
   scroll: number,
 ): void {
@@ -70,9 +78,13 @@ export function savePartProgress(
   const clamped = Math.max(0, Math.min(1, scroll));
   const payload: PartProgress = { scroll: clamped, updatedAt: new Date().toISOString() };
   try {
-    window.localStorage.setItem(progressKey(storyId, partNumber), JSON.stringify(payload));
+    window.localStorage.setItem(
+      progressKey(storyId, variantSlug, partNumber),
+      JSON.stringify(payload),
+    );
     const lastRead: LastRead = {
       storyId,
+      variantSlug,
       partNumber,
       updatedAt: payload.updatedAt,
     };
@@ -81,7 +93,6 @@ export function savePartProgress(
     // localStorage full / disabled — silently ignore. Reading still works.
   }
   // Notify same-tab subscribers (PartReadIndicator, ContinueReading).
-  // Cross-tab listeners get the native `storage` event automatically.
   window.dispatchEvent(new CustomEvent(SAME_TAB_EVENT));
 }
 
@@ -102,8 +113,10 @@ export function getLastRead(): LastRead | null {
       parsed &&
       typeof parsed === "object" &&
       "storyId" in parsed &&
+      "variantSlug" in parsed &&
       "partNumber" in parsed &&
-      typeof (parsed as LastRead).storyId === "string"
+      typeof (parsed as LastRead).storyId === "string" &&
+      typeof (parsed as LastRead).variantSlug === "string"
     ) {
       return parsed as LastRead;
     }

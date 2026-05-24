@@ -6,6 +6,8 @@ import { languageFontStyle } from "@/lib/i18n/fonts";
 
 export interface StoryCardData {
   id: string;
+  /** Primary (or selected) variant slug — used for "Continue reading" deep links. */
+  variant_slug: string;
   title_original: string;
   title_translated: string | null;
   cover_image_url: string | null;

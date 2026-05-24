@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FontControls } from "./FontControls";
 import { ProgressBar } from "./ProgressBar";
 import { ReaderBody } from "./ReaderBody";
-import { ReaderChrome } from "./ReaderChrome";
+import { ReaderChrome, type VariantOption } from "./ReaderChrome";
 import { ReaderSettingsSheet } from "./ReaderSettings";
 import {
   clampFontSize,
@@ -31,6 +31,7 @@ export interface ReaderShellPart {
 
 export interface ReaderShellStory {
   id: string;
+  variantSlug: string;
   titleOriginal: string;
   titleTranslated: string | null;
   totalParts: number;
@@ -46,6 +47,7 @@ interface ReaderShellProps {
   part: ReaderShellPart;
   prevHref: string | null;
   nextHref: string | null;
+  variants: ReadonlyArray<VariantOption>;
 }
 
 const CHROME_HIDE_MS = 3000;
@@ -64,7 +66,7 @@ const PROGRESS_SAVE_MS = 5000;
  * deterministic; the first useEffect tick swaps in the persisted values.
  * Body content is identical pre/post hydration so there's no mismatch.
  */
-export function ReaderShell({ story, part, prevHref, nextHref }: ReaderShellProps) {
+export function ReaderShell({ story, part, prevHref, nextHref, variants }: ReaderShellProps) {
   const [settings, setSettings] = useState<ReaderSettings>(DEFAULT_SETTINGS);
   const [fontSize, setFontSize] = useState<number>(DEFAULT_FONT_SIZE);
   const [chromeVisible, setChromeVisible] = useState(true);
@@ -90,7 +92,7 @@ export function ReaderShell({ story, part, prevHref, nextHref }: ReaderShellProp
       setSettings(getReaderSettings());
       setFontSize(getFontSize());
 
-      const saved = getPartProgress(story.id, part.partNumber);
+      const saved = getPartProgress(story.id, story.variantSlug, part.partNumber);
       if (saved && saved.scroll > 0.02) {
         // Wait one frame so the article has laid out at its persisted size.
         requestAnimationFrame(() => {
@@ -104,7 +106,7 @@ export function ReaderShell({ story, part, prevHref, nextHref }: ReaderShellProp
     return () => {
       cancelled = true;
     };
-  }, [story.id, part.partNumber]);
+  }, [story.id, story.variantSlug, part.partNumber]);
 
   // -- save reader settings whenever they change ----------------------------
   useEffect(() => {
@@ -157,7 +159,7 @@ export function ReaderShell({ story, part, prevHref, nextHref }: ReaderShellProp
     function snapshot() {
       const max = document.documentElement.scrollHeight - window.innerHeight;
       const ratio = max > 0 ? window.scrollY / max : 0;
-      savePartProgress(story.id, part.partNumber, ratio);
+      savePartProgress(story.id, story.variantSlug, part.partNumber, ratio);
     }
     const interval = setInterval(snapshot, PROGRESS_SAVE_MS);
     function onVisibility() {
@@ -170,7 +172,7 @@ export function ReaderShell({ story, part, prevHref, nextHref }: ReaderShellProp
       document.removeEventListener("visibilitychange", onVisibility);
       snapshot();
     };
-  }, [story.id, part.partNumber]);
+  }, [story.id, story.variantSlug, part.partNumber]);
 
   // -- pinch-to-zoom on the article -----------------------------------------
   useEffect(() => {
@@ -237,6 +239,8 @@ export function ReaderShell({ story, part, prevHref, nextHref }: ReaderShellProp
           setSettingsOpen(true);
           setChromeVisible(true);
         }}
+        variants={variants}
+        currentVariantSlug={story.variantSlug}
       />
 
       <ReaderBody

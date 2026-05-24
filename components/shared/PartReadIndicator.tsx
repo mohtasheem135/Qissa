@@ -9,6 +9,7 @@ import {
 
 interface PartReadIndicatorProps {
   storyId: string;
+  variantSlug: string;
   partNumber: number;
 }
 
@@ -26,15 +27,15 @@ function subscribe(listener: () => void): () => void {
 }
 
 /**
- * Tiny per-part read indicator. Reads localStorage progress and renders
- * one of three icons. SSR snapshot is always "unread" — the icon may
- * flip once after hydration if there is progress for this part, no
- * hydration mismatch because both render the same SSR HTML.
+ * Tiny per-part read indicator. Reads localStorage progress for one
+ * (story, variant, part) tuple and renders one of three icons. SSR snapshot
+ * is always "unread" — the icon may flip once after hydration if there is
+ * progress, no hydration mismatch because both render the same SSR HTML.
  */
-export function PartReadIndicator({ storyId, partNumber }: PartReadIndicatorProps) {
+export function PartReadIndicator({ storyId, variantSlug, partNumber }: PartReadIndicatorProps) {
   const status = useSyncExternalStore(
     subscribe,
-    () => getPartReadStatus(storyId, partNumber),
+    () => getPartReadStatus(storyId, variantSlug, partNumber),
     () => "unread" as ReadStatus,
   );
 

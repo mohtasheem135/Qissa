@@ -1,15 +1,17 @@
 # API Overview
 
-> Only four HTTP endpoints. Everything else uses Server Actions or anon Supabase reads from server components.
+> Six HTTP endpoints. Everything else uses Server Actions or anon Supabase reads from server components.
 
-All routes live under [app/api/](../../app/api/). All four require `requireAdmin()` (see [UI/auth.md](../UI/auth.md)) — the public area never POSTs to the server, only reads.
+All routes live under [app/api/](../../app/api/). The translate + upload + ai/test routes require `requireAdmin()` (see [UI/auth.md](../UI/auth.md)); the requests routes are **anonymous** (honeypot + IP rate-limit applied inside the handler).
 
-| Route | Method | Purpose | Doc |
-|---|---|---|---|
-| `/api/translate` | POST | Translate one part end-to-end | [translate.md](./translate.md) |
-| `/api/translate/queue` | POST | SSE batch translation of a story's pending parts | [translate.md](./translate.md) |
-| `/api/upload` | POST (multipart) | ImageKit cover upload | [upload.md](./upload.md) |
-| `/api/ai/test` | POST | Real round-trip to a provider with a known prompt | [ai-test.md](./ai-test.md) |
+| Route | Method | Auth | Purpose | Doc |
+|---|---|---|---|---|
+| `/api/translate` | POST | admin | Translate one (variant × part) end-to-end | [translate.md](./translate.md) |
+| `/api/translate/queue` | POST | admin | SSE batch translation of a variant's pending part-translations | [translate.md](./translate.md) |
+| `/api/upload` | POST (multipart) | admin | ImageKit cover upload | [upload.md](./upload.md) |
+| `/api/ai/test` | POST | admin | Real round-trip to a provider with a known prompt | [ai-test.md](./ai-test.md) |
+| `/api/requests` | POST | **anon** | Submit a story / variant request (honeypot + rate-limited + dedupe→upvote) | [requests.md](./requests.md) |
+| `/api/requests/[id]/vote` | POST | **anon** | Upvote an existing request (per-IP dedupe) | [requests.md](./requests.md) |
 
 ---
 

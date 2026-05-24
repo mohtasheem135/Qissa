@@ -13,10 +13,10 @@ type State =
   | { kind: "loaded"; story: StoryCardData; lastRead: LastRead };
 
 /**
- * Reads the last-read pointer from localStorage on mount, fetches the
- * matching story (RLS-gated to published), and renders a Resume card.
- * State transitions only happen in async callbacks so React 19's
- * `react-hooks/set-state-in-effect` lint stays happy.
+ * Reads the variant-scoped last-read pointer from localStorage on mount,
+ * fetches the matching story + variant (RLS-gated to published+active), and
+ * renders a Resume card. State transitions only happen in async callbacks
+ * so React 19's `react-hooks/set-state-in-effect` lint stays happy.
  */
 export function ContinueReading() {
   const [state, setState] = useState<State>({ kind: "loading" });
@@ -26,8 +26,6 @@ export function ContinueReading() {
     const stored = getLastRead();
 
     if (!stored) {
-      // No last-read — flip to `none` via a microtask so the setState is
-      // not synchronous within the effect body.
       Promise.resolve().then(() => {
         if (!cancelled) setState({ kind: "none" });
       });
@@ -40,32 +38,37 @@ export function ContinueReading() {
     supabase
       .from("stories")
       .select(
-        `id, title_original, title_translated, cover_image_url, total_parts,
-         estimated_reading_minutes,
-         language:languages!inner ( name_english, font_family, font_family_reading ),
-         tone:tones!inner ( name )`,
+        `id, title_original, cover_image_url, total_parts,
+         variants:story_variants!inner (
+           slug, title_translated, estimated_reading_minutes,
+           language:languages!inner ( name_english, font_family, font_family_reading ),
+           tone:tones!inner ( name )
+         )`,
       )
       .eq("id", stored.storyId)
-      .eq("status", "published")
-      .eq("is_active", true)
-      .single()
+      .eq("variants.slug", stored.variantSlug)
+      .eq("variants.status", "published")
+      .eq("variants.is_active", true)
+      .maybeSingle()
       .then(({ data }) => {
         if (cancelled) return;
-        if (!data) {
+        const variant = data?.variants?.[0];
+        if (!data || !variant) {
           setState({ kind: "none" });
           return;
         }
         const story: StoryCardData = {
           id: data.id,
+          variant_slug: variant.slug,
           title_original: data.title_original,
-          title_translated: data.title_translated,
+          title_translated: variant.title_translated,
           cover_image_url: data.cover_image_url,
           total_parts: data.total_parts,
-          estimated_reading_minutes: data.estimated_reading_minutes,
-          language_name_english: data.language?.name_english ?? "",
-          language_font_family: data.language?.font_family ?? null,
-          language_font_family_reading: data.language?.font_family_reading ?? null,
-          tone_name: data.tone?.name ?? null,
+          estimated_reading_minutes: variant.estimated_reading_minutes,
+          language_name_english: variant.language?.name_english ?? "",
+          language_font_family: variant.language?.font_family ?? null,
+          language_font_family_reading: variant.language?.font_family_reading ?? null,
+          tone_name: variant.tone?.name ?? null,
         };
         setState({ kind: "loaded", story, lastRead: stored });
       });
@@ -84,7 +87,9 @@ export function ContinueReading() {
           Continue reading
         </h2>
         <Button asChild variant="link" size="sm" className="text-muted-foreground">
-          <Link href={`/s/${state.story.id}/p/${state.lastRead.partNumber}`}>
+          <Link
+            href={`/s/${state.story.id}/${state.lastRead.variantSlug}/p/${state.lastRead.partNumber}`}
+          >
             Resume Part {state.lastRead.partNumber} →
           </Link>
         </Button>

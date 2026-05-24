@@ -6,30 +6,28 @@ import type { ProviderId } from "@/lib/ai/registry";
 /**
  * POST /api/translate/queue (Server-Sent Events)
  *
- * Body: { storyId, fromPartNumber?, providerName?, modelName? }
+ * Body: { variantId, fromPartNumber?, providerName?, modelName? }
  *
- * Translates every `pending` and `failed` part of a story in order, sending
- * a stream of newline-delimited JSON events:
+ * Translates every `pending` and `failed` translation for the given variant
+ * in part_number order, streaming newline-delimited JSON events:
  *
  *   data: { "type": "queue_started", "totalParts": 4 }\n\n
- *   data: { "type": "part_started", "partNumber": 1, "partId": "uuid" }\n\n
- *   data: { "type": "part_completed", "partNumber": 1, "partId": "uuid", ... }\n\n
- *   data: { "type": "part_failed", "partNumber": 2, "partId": "uuid", "error": "..." }\n\n
+ *   data: { "type": "part_started", "partNumber": 1, "translationId": "uuid" }\n\n
+ *   data: { "type": "part_completed", "partNumber": 1, "translationId": "uuid", ... }\n\n
+ *   data: { "type": "part_failed", "partNumber": 2, "translationId": "uuid", "error": "..." }\n\n
  *   data: { "type": "queue_done", "completed": 3, "failed": 1 }\n\n
  *
- * The client (components/admin/TranslationProgress.tsx) consumes via
- * fetch().body.getReader(); EventSource doesn't support custom auth
- * headers cleanly so SSE-over-fetch is the way.
+ * The client consumes via fetch().body.getReader(); EventSource doesn't
+ * support custom auth headers cleanly so SSE-over-fetch is the way.
  *
- * Cancellation: request.signal aborts when the browser closes the
- * connection (e.g. admin clicks Cancel); we stop dispatching new parts
- * but the in-flight part runs to completion (no partial DB state).
+ * Cancellation: request.signal aborts when the browser closes the connection;
+ * we stop dispatching new parts but the in-flight part runs to completion.
  */
 export async function POST(request: Request): Promise<Response> {
   await requireAdmin();
 
   let body: {
-    storyId?: string;
+    variantId?: string;
     fromPartNumber?: number;
     providerName?: ProviderId;
     modelName?: string;
@@ -43,9 +41,9 @@ export async function POST(request: Request): Promise<Response> {
     });
   }
 
-  const storyId = body.storyId?.trim();
-  if (!storyId) {
-    return new Response(JSON.stringify({ error: "storyId is required." }), {
+  const variantId = body.variantId?.trim();
+  if (!variantId) {
+    return new Response(JSON.stringify({ error: "variantId is required." }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
@@ -53,21 +51,20 @@ export async function POST(request: Request): Promise<Response> {
 
   const admin = createAdminClient();
 
-  // Select which parts to process: pending OR failed, optionally from a
-  // given part_number onward. Edited/completed parts are skipped (admin
-  // can hit per-part re-translate explicitly).
-  let query = admin
-    .from("story_parts")
-    .select("id, part_number, status")
-    .eq("story_id", storyId)
+  // Pull pending/failed translations for this variant, ordered by the parent
+  // part's part_number. Edited/completed are skipped (admin can hit per-part
+  // re-translate explicitly).
+  type QueueRow = {
+    id: string;
+    part: { id: string; part_number: number } | null;
+  };
+  const { data: rows, error } = await admin
+    .from("story_part_translations")
+    .select(`id, part:story_parts!inner ( id, part_number )`)
+    .eq("variant_id", variantId)
     .in("status", ["pending", "failed"])
-    .order("part_number", { ascending: true });
-
-  if (typeof body.fromPartNumber === "number") {
-    query = query.gte("part_number", body.fromPartNumber);
-  }
-
-  const { data: parts, error } = await query;
+    .order("part_number", { ascending: true, referencedTable: "story_parts" })
+    .returns<QueueRow[]>();
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
@@ -75,7 +72,13 @@ export async function POST(request: Request): Promise<Response> {
     });
   }
 
-  const queue = parts ?? [];
+  const queue = (rows ?? [])
+    .filter((r): r is QueueRow & { part: NonNullable<QueueRow["part"]> } => r.part !== null)
+    .filter((r) =>
+      typeof body.fromPartNumber === "number"
+        ? r.part.part_number >= (body.fromPartNumber as number)
+        : true,
+    );
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -84,25 +87,30 @@ export async function POST(request: Request): Promise<Response> {
         try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
         } catch {
-          // Controller closed (client disconnected). Swallow.
+          // Controller closed (client disconnected).
         }
       };
 
       let completed = 0;
       let failed = 0;
 
-      send({ type: "queue_started", totalParts: queue.length, storyId });
+      send({ type: "queue_started", totalParts: queue.length, variantId });
 
       try {
-        for (const part of queue) {
+        for (const row of queue) {
           if (request.signal.aborted) {
             send({ type: "queue_cancelled", completed, failed });
             return;
           }
 
-          send({ type: "part_started", partId: part.id, partNumber: part.part_number });
+          send({
+            type: "part_started",
+            translationId: row.id,
+            partId: row.part.id,
+            partNumber: row.part.part_number,
+          });
 
-          const result = await runStoryPartTranslation(part.id, {
+          const result = await runStoryPartTranslation(row.id, {
             providerName: body.providerName,
             modelName: body.modelName,
             signal: request.signal,
@@ -112,8 +120,9 @@ export async function POST(request: Request): Promise<Response> {
             completed++;
             send({
               type: "part_completed",
-              partId: part.id,
-              partNumber: part.part_number,
+              translationId: row.id,
+              partId: row.part.id,
+              partNumber: row.part.part_number,
               translatedText: result.output.translatedText,
               modelUsed: result.output.modelUsed,
               tokensUsed: result.output.tokensUsed,
@@ -123,8 +132,9 @@ export async function POST(request: Request): Promise<Response> {
             failed++;
             send({
               type: "part_failed",
-              partId: part.id,
-              partNumber: part.part_number,
+              translationId: row.id,
+              partId: row.part.id,
+              partNumber: row.part.part_number,
               error: result.error,
               durationMs: result.durationMs,
             });
@@ -144,8 +154,7 @@ export async function POST(request: Request): Promise<Response> {
       }
     },
     cancel() {
-      // Browser disconnected. request.signal.aborted is true at this point;
-      // the iteration loop will exit on its next check.
+      // Browser disconnected; iteration exits on the next signal check.
     },
   });
 

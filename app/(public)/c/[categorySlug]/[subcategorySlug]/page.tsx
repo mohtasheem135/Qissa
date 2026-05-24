@@ -49,7 +49,9 @@ export default async function SubcategoryPage({ params }: PageProps) {
     .limit(60);
   if (storiesErr) throw storiesErr;
 
-  const cards = (stories ?? []).map(toStoryCard);
+  const cards = (stories ?? [])
+    .map(toStoryCard)
+    .filter((s): s is NonNullable<typeof s> => s !== null);
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 px-4 py-8">
