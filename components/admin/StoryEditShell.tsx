@@ -2,21 +2,23 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { addStoryPart } from "@/lib/actions/story-parts";
 import { deleteStory, setStoryPublished } from "@/lib/actions/stories";
 import type { ProviderMeta } from "@/lib/ai/registry";
-import { PartCard, type PartCardData, type PartStatus } from "./PartCard";
+import { CreateVariantDialog } from "./CreateVariantDialog";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import {
   EditStoryMetadataDialog,
   type StoryMetadataInitialValue,
 } from "./EditStoryMetadataDialog";
+import { SourcePartRow, type SourcePartData } from "./SourcePartRow";
+import { VariantPanel, type VariantPanelData } from "./VariantPanel";
 import type {
   CategoryWithSubsOption,
   LanguageOption,
@@ -26,53 +28,28 @@ import type {
 export interface StoryEditData {
   id: string;
   title_original: string;
-  title_translated: string | null;
   cover_image_url: string | null;
   category_name: string;
   subcategory_name: string;
-  language_name_english: string;
-  tone_name: string;
-  ai_provider: string | null;
-  ai_model: string | null;
   status: "draft" | "published";
   total_words_original: number;
-  total_words_translated: number;
-  parts: PartCardData[];
-}
-
-interface QueueEvent {
-  type:
-    | "queue_started"
-    | "part_started"
-    | "part_completed"
-    | "part_failed"
-    | "queue_done"
-    | "queue_cancelled"
-    | "queue_error";
-  totalParts?: number;
-  partId?: string;
-  partNumber?: number;
-  translatedText?: string;
-  error?: string;
-  completed?: number;
-  failed?: number;
-}
-
-interface LivePartState {
-  status: PartStatus;
-  error: string | null;
+  parts: ReadonlyArray<SourcePartData>;
+  variants: ReadonlyArray<VariantPanelData>;
 }
 
 interface StoryEditShellProps {
   story: StoryEditData;
-  /** Pre-shaped initial values for the EditStoryMetadataDialog. */
   editInitial: StoryMetadataInitialValue;
   categories: ReadonlyArray<CategoryWithSubsOption>;
   languages: ReadonlyArray<LanguageOption>;
   tones: ReadonlyArray<ToneOption>;
   providers: ReadonlyArray<ProviderMeta>;
   configuredProviderIds: ReadonlyArray<string>;
+  defaultProvider: string;
+  defaultModel: string;
 }
+
+const SOURCE_TAB = "__source__";
 
 export function StoryEditShell({
   story,
@@ -82,129 +59,36 @@ export function StoryEditShell({
   tones,
   providers,
   configuredProviderIds,
+  defaultProvider,
+  defaultModel,
 }: StoryEditShellProps) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
-
-  // Out-of-band part status from the SSE queue. Overrides the DB status
-  // until the next router.refresh() reconciles.
-  const [liveByPart, setLiveByPart] = useState<Record<string, LivePartState>>({});
-  const [queueRunning, setQueueRunning] = useState(false);
-  const [queueSummary, setQueueSummary] = useState<{ completed: number; failed: number } | null>(
-    null,
-  );
-  const abortRef = useRef<AbortController | null>(null);
-
   const [publishPending, startPublish] = useTransition();
   const [addPending, startAdd] = useTransition();
 
-  const pendingCount = story.parts.filter(
-    (p) =>
-      (liveByPart[p.id]?.status ?? p.status) === "pending" ||
-      (liveByPart[p.id]?.status ?? p.status) === "failed",
-  ).length;
-
-  const runQueue = useCallback(
-    async (fromPartNumber?: number) => {
-      if (queueRunning) return;
-      const controller = new AbortController();
-      abortRef.current = controller;
-      setQueueRunning(true);
-      setQueueSummary(null);
-      setLiveByPart({});
-
-      try {
-        const response = await fetch("/api/translate/queue", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ storyId: story.id, fromPartNumber }),
-          signal: controller.signal,
-        });
-
-        if (!response.ok || !response.body) {
-          const errText = await response.text().catch(() => "");
-          toast.error(`Queue failed: ${response.status} ${errText.slice(0, 200)}`);
-          return;
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const events = buffer.split("\n\n");
-          buffer = events.pop() ?? "";
-          for (const ev of events) {
-            if (!ev.startsWith("data: ")) continue;
-            try {
-              const data = JSON.parse(ev.slice(6)) as QueueEvent;
-              handleEvent(data);
-            } catch {
-              // ignore malformed event
-            }
-          }
-        }
-      } catch (err) {
-        if ((err as { name?: string }).name === "AbortError") {
-          toast.message("Translation cancelled.");
-        } else {
-          toast.error(err instanceof Error ? err.message : "Queue error.");
-        }
-      } finally {
-        setQueueRunning(false);
-        abortRef.current = null;
-        // Reconcile DB state once everything settles.
-        router.refresh();
-      }
-    },
-    [queueRunning, story.id, router],
-  );
-
-  function handleEvent(data: QueueEvent) {
-    if (data.type === "queue_started") {
-      toast.message(`Translating ${data.totalParts ?? 0} part(s)…`);
-    } else if (data.type === "part_started" && data.partId) {
-      setLiveByPart((prev) => ({
-        ...prev,
-        [data.partId!]: { status: "translating", error: null },
-      }));
-    } else if (data.type === "part_completed" && data.partId) {
-      setLiveByPart((prev) => ({
-        ...prev,
-        [data.partId!]: { status: "completed", error: null },
-      }));
-    } else if (data.type === "part_failed" && data.partId) {
-      setLiveByPart((prev) => ({
-        ...prev,
-        [data.partId!]: { status: "failed", error: data.error ?? "Translation failed." },
-      }));
-    } else if (data.type === "queue_done" || data.type === "queue_cancelled") {
-      setQueueSummary({
-        completed: data.completed ?? 0,
-        failed: data.failed ?? 0,
-      });
-      if (data.type === "queue_done") {
-        toast.success(
-          `Queue done: ${data.completed ?? 0} translated, ${data.failed ?? 0} failed.`,
-        );
-      }
-    } else if (data.type === "queue_error") {
-      toast.error(`Queue error: ${data.error ?? "unknown"}`);
+  // Default to the primary variant tab if there's at least one variant; else
+  // Source. Reset only when the variant set actually changes (e.g. one is
+  // added or deleted) so a router.refresh from a Translate run doesn't yank
+  // the admin off the tab they were looking at.
+  const variantIds = story.variants.map((v) => v.id).join("|");
+  const primaryId = story.variants.find((v) => v.is_primary)?.id ?? story.variants[0]?.id;
+  const defaultTab = primaryId ?? SOURCE_TAB;
+  const [activeTab, setActiveTab] = useState<string>(defaultTab);
+  const [prevVariantIds, setPrevVariantIds] = useState<string>(variantIds);
+  if (variantIds !== prevVariantIds) {
+    setPrevVariantIds(variantIds);
+    if (activeTab !== SOURCE_TAB && !story.variants.some((v) => v.id === activeTab)) {
+      // The active variant was just deleted — fall back to a sensible default.
+      setActiveTab(defaultTab);
     }
-  }
-
-  function handleCancel() {
-    abortRef.current?.abort();
   }
 
   function handleTogglePublished(next: boolean) {
     startPublish(async () => {
       try {
         await setStoryPublished(story.id, next);
-        toast.success(next ? "Published." : "Unpublished.");
+        toast.success(next ? "Story published." : "Story unpublished.");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to update.");
       }
@@ -215,45 +99,20 @@ export function StoryEditShell({
     startAdd(async () => {
       try {
         await addStoryPart(story.id);
-        toast.success("Part added.");
+        toast.success("Part added. Pending translations seeded for every variant.");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to add part.");
       }
     });
   }
 
-  async function handleTranslateOne(partId: string) {
-    if (queueRunning) return;
-    setLiveByPart((prev) => ({ ...prev, [partId]: { status: "translating", error: null } }));
-    try {
-      const res = await fetch("/api/translate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ storyPartId: partId }),
-      });
-      const data = (await res.json()) as { ok: boolean; error?: string };
-      if (res.ok && data.ok) {
-        setLiveByPart((prev) => ({ ...prev, [partId]: { status: "completed", error: null } }));
-        toast.success("Translated.");
-      } else {
-        setLiveByPart((prev) => ({
-          ...prev,
-          [partId]: { status: "failed", error: data.error ?? "Translation failed." },
-        }));
-        toast.error(data.error ?? `Translation failed (${res.status}).`);
-      }
-    } catch (err) {
-      setLiveByPart((prev) => ({
-        ...prev,
-        [partId]: {
-          status: "failed",
-          error: err instanceof Error ? err.message : "Network error.",
-        },
-      }));
-    } finally {
-      router.refresh();
-    }
-  }
+  const existingPairs = story.variants.map((v) => ({
+    target_language: v.target_language,
+    tone_id:
+      tones.find((t) => t.name === v.tone_name && t.language_code === v.target_language)?.id ?? "",
+  }));
+
+  const publishedVariants = story.variants.filter((v) => v.status === "published").length;
 
   return (
     <div className="space-y-6">
@@ -267,20 +126,22 @@ export function StoryEditShell({
             ← Stories
           </Link>
           <h1 className="truncate text-2xl font-semibold tracking-tight">
-            {story.title_translated ?? story.title_original}
+            {story.title_original}
           </h1>
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <Badge variant="secondary">{story.language_name_english}</Badge>
-            <Badge variant="outline">{story.tone_name}</Badge>
+            <Badge variant={story.status === "published" ? "default" : "outline"}>
+              {story.status}
+            </Badge>
             <span className="text-muted-foreground">
               {story.category_name} → {story.subcategory_name}
             </span>
-            {story.ai_provider ? (
-              <span className="text-muted-foreground">
-                · {story.ai_provider}
-                {story.ai_model ? ` · ${story.ai_model}` : ""}
-              </span>
-            ) : null}
+            <span className="text-muted-foreground">
+              · {story.parts.length} part{story.parts.length === 1 ? "" : "s"} ·{" "}
+              {story.variants.length} variant{story.variants.length === 1 ? "" : "s"}
+              {story.variants.length > 0
+                ? ` (${publishedVariants} published)`
+                : ""}
+            </span>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -298,7 +159,7 @@ export function StoryEditShell({
           </div>
           <DeleteConfirmDialog
             title="Delete this story?"
-            description="Soft delete — hides the story from readers and the listing. Translations are preserved."
+            description="Soft delete — hides the story and every variant from readers and listings. Translations are preserved."
             onConfirm={async () => {
               const result = await deleteStory(story.id);
               if (!result.error) router.push("/admin/stories");
@@ -314,73 +175,106 @@ export function StoryEditShell({
         onOpenChange={setEditOpen}
         initialValue={editInitial}
         categories={categories}
-        languages={languages}
-        tones={tones}
-        providers={providers}
-        configuredProviderIds={configuredProviderIds}
       />
 
-      {/* Queue controls */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-base">Translation queue</CardTitle>
-            <p className="text-muted-foreground mt-1 text-xs">
-              {pendingCount > 0
-                ? `${pendingCount} pending / failed part${pendingCount === 1 ? "" : "s"}.`
-                : "All parts translated."}
-              {queueSummary
-                ? ` Last run: ${queueSummary.completed} ok, ${queueSummary.failed} failed.`
-                : ""}
+      {/* Tabs: Source · each variant. "Add variant" sits next to the list. */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <TabsList>
+            <TabsTrigger value={SOURCE_TAB}>
+              Source
+              <span className="text-muted-foreground ml-1.5 text-xs tabular-nums">
+                {story.parts.length}
+              </span>
+            </TabsTrigger>
+            {story.variants.map((v) => {
+              const translatedCount = v.parts.filter(
+                (p) => p.status === "completed" || p.status === "edited",
+              ).length;
+              return (
+                <TabsTrigger key={v.id} value={v.id}>
+                  <span className="font-medium">
+                    {v.language_name_english}
+                    <span className="text-muted-foreground"> · {v.tone_name}</span>
+                  </span>
+                  {v.is_primary ? (
+                    <span className="text-primary ml-1 text-[10px]" aria-label="primary">
+                      ★
+                    </span>
+                  ) : null}
+                  <Badge
+                    variant={v.status === "published" ? "default" : "outline"}
+                    className="ml-1 px-1 py-0 text-[10px]"
+                  >
+                    {translatedCount}/{v.parts.length}
+                  </Badge>
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+
+          <CreateVariantDialog
+            storyId={story.id}
+            existingPairs={existingPairs}
+            languages={languages}
+            tones={tones}
+            providers={providers}
+            configuredProviderIds={configuredProviderIds}
+            defaultProvider={defaultProvider}
+            defaultModel={defaultModel}
+            canSetPrimary={story.variants.length > 0}
+          />
+        </div>
+
+        {/* Source tab */}
+        <TabsContent value={SOURCE_TAB} className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-muted-foreground text-xs">
+              The original text. Shared across every variant — edits here invalidate existing
+              translations until you re-run them. {story.total_words_original} words total.
             </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleAddPart}
+              disabled={addPending}
+            >
+              + Add empty part
+            </Button>
           </div>
-          <div className="flex gap-2">
-            {queueRunning ? (
-              <Button variant="outline" size="sm" onClick={handleCancel}>
-                Cancel
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                disabled={pendingCount === 0}
-                onClick={() => runQueue()}
-              >
-                Translate {pendingCount > 0 ? `${pendingCount} ` : ""}pending
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground text-xs">
-            {story.total_words_original} words original · {story.total_words_translated} words
-            translated.
-          </p>
-        </CardContent>
-      </Card>
+          {story.parts.length === 0 ? (
+            <p className="text-muted-foreground py-12 text-center text-sm">No parts yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {story.parts.map((part, idx) => (
+                <SourcePartRow
+                  key={part.id}
+                  part={part}
+                  isFirst={idx === 0}
+                  isLast={idx === story.parts.length - 1}
+                />
+              ))}
+            </div>
+          )}
+          {story.variants.length === 0 ? (
+            <div className="bg-muted/20 mt-2 rounded-md border border-dashed p-6 text-center">
+              <p className="text-muted-foreground text-sm">
+                No variants yet. Click <span className="font-medium">+ Add variant</span> above to
+                translate this story into a language + tone.
+              </p>
+            </div>
+          ) : null}
+        </TabsContent>
 
-      {/* Parts */}
-      <div className="space-y-3">
-        {story.parts.map((part, idx) => {
-          const live = liveByPart[part.id];
-          return (
-            <PartCard
-              key={part.id}
-              part={part}
-              isInFlight={live?.status === "translating"}
-              liveStatus={live?.status}
-              liveError={live?.error}
-              isFirst={idx === 0}
-              isLast={idx === story.parts.length - 1}
-              onTranslate={handleTranslateOne}
-              queueRunning={queueRunning}
-            />
-          );
-        })}
-
-        <Button type="button" variant="outline" onClick={handleAddPart} disabled={addPending}>
-          + Add empty part
-        </Button>
-      </div>
+        {/* One tab per variant. `forceMount` keeps each VariantPanel mounted so a
+            running translation queue isn't aborted by switching tabs. */}
+        {story.variants.map((v) => (
+          <TabsContent key={v.id} value={v.id} forceMount className="data-[state=inactive]:hidden">
+            <VariantPanel variant={v} hasSiblings={story.variants.length > 1} />
+          </TabsContent>
+        ))}
+      </Tabs>
     </div>
   );
 }

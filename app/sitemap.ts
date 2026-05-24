@@ -13,12 +13,17 @@ export const revalidate = 3600;
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = await createClient();
 
-  const [{ data: stories }, { data: categories }] = await Promise.all([
+  const [{ data: stories }, { data: variants }, { data: categories }] = await Promise.all([
     supabase
       .from("stories")
       .select("id, updated_at, published_at")
       .order("published_at", { ascending: false })
       .limit(1000),
+    supabase
+      .from("story_variants")
+      .select("story_id, slug, updated_at, published_at")
+      .order("published_at", { ascending: false })
+      .limit(2000),
     supabase
       .from("categories")
       .select("slug, updated_at, subcategories ( slug, updated_at, is_active )")
@@ -45,6 +50,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.8,
   }));
 
+  // One sitemap entry per published variant — the per-variant URLs are the
+  // canonical reader pages now. The story landing URL above stays as the
+  // hub that lists every variant.
+  const variantEntries: MetadataRoute.Sitemap = (variants ?? []).map((v) => ({
+    url: `${APP_URL}/s/${v.story_id}/${v.slug}/p/1`,
+    lastModified: new Date(v.updated_at ?? v.published_at ?? now),
+    changeFrequency: "weekly",
+    priority: 0.7,
+  }));
+
   const categoryEntries: MetadataRoute.Sitemap = [];
   for (const category of categories ?? []) {
     categoryEntries.push({
@@ -64,5 +79,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   }
 
-  return [...staticEntries, ...categoryEntries, ...storyEntries];
+  return [...staticEntries, ...categoryEntries, ...storyEntries, ...variantEntries];
 }

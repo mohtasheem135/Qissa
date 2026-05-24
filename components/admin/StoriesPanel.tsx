@@ -26,21 +26,24 @@ import { deleteStory, setStoryPublished } from "@/lib/actions/stories";
 import { coverUrl } from "@/lib/imagekit/url";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 
+export interface StoryVariantSummary {
+  id: string;
+  target_language: string;
+  language_name_english: string;
+  tone_name: string;
+  status: "draft" | "published";
+}
+
 export interface StoryRow {
   id: string;
   title_original: string;
-  title_translated: string | null;
   cover_image_url: string | null;
-  target_language: string;
   status: "draft" | "published";
   total_parts: number;
-  completed_parts: number;
-  ai_provider: string | null;
   updated_at: string;
   subcategory_name: string;
   category_name: string;
-  tone_name: string;
-  language_name_english: string;
+  variants: ReadonlyArray<StoryVariantSummary>;
 }
 
 interface FilterOption {
@@ -68,9 +71,16 @@ export function StoriesPanel({ stories, languageOptions }: StoriesPanelProps) {
     const q = search.trim().toLowerCase();
     return stories.filter((row) => {
       if (statusFilter !== "all" && row.status !== statusFilter) return false;
-      if (languageFilter !== "all" && row.target_language !== languageFilter) return false;
+      if (
+        languageFilter !== "all" &&
+        !row.variants.some((v) => v.target_language === languageFilter)
+      ) {
+        return false;
+      }
       if (q) {
-        const haystack = `${row.title_original} ${row.title_translated ?? ""}`.toLowerCase();
+        const haystack = `${row.title_original} ${row.variants
+          .map((v) => v.language_name_english + " " + v.tone_name)
+          .join(" ")}`.toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       return true;
@@ -94,7 +104,7 @@ export function StoriesPanel({ stories, languageOptions }: StoriesPanelProps) {
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
           <label htmlFor="story-search" className="text-muted-foreground text-xs">
-            Search title
+            Search title / variant
           </label>
           <Input
             id="story-search"
@@ -120,7 +130,7 @@ export function StoriesPanel({ stories, languageOptions }: StoriesPanelProps) {
           </Select>
         </div>
         <div className="space-y-1">
-          <label className="text-muted-foreground text-xs">Target language</label>
+          <label className="text-muted-foreground text-xs">Has variant in</label>
           <Select value={languageFilter} onValueChange={setLanguageFilter}>
             <SelectTrigger className="w-44">
               <SelectValue />
@@ -144,8 +154,7 @@ export function StoriesPanel({ stories, languageOptions }: StoriesPanelProps) {
               <TableHead className="w-20">Cover</TableHead>
               <TableHead>Title</TableHead>
               <TableHead>Subcategory</TableHead>
-              <TableHead>Language</TableHead>
-              <TableHead>Tone</TableHead>
+              <TableHead>Variants</TableHead>
               <TableHead className="text-right">Parts</TableHead>
               <TableHead className="w-24 text-center">Status</TableHead>
               <TableHead className="w-44 text-right">Actions</TableHead>
@@ -154,7 +163,7 @@ export function StoriesPanel({ stories, languageOptions }: StoriesPanelProps) {
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-muted-foreground py-12 text-center text-sm">
+                <TableCell colSpan={7} className="text-muted-foreground py-12 text-center text-sm">
                   {stories.length === 0
                     ? "No stories yet — create your first."
                     : "No stories match the current filters."}
@@ -185,9 +194,8 @@ function StoryTableRow({ row }: { row: StoryRow }) {
     });
   }
 
-  // Compose via the helper so the row works whether the DB holds a path
-  // (new uploads) or a legacy full URL.
   const thumbSrc = coverUrl(row.cover_image_url, "w-80,h-80,c-maintain_ratio");
+  const publishedVariants = row.variants.filter((v) => v.status === "published").length;
 
   return (
     <TableRow>
@@ -212,24 +220,39 @@ function StoryTableRow({ row }: { row: StoryRow }) {
           href={`/admin/stories/${row.id}`}
           className="block font-medium hover:underline"
         >
-          {row.title_translated ?? row.title_original}
+          {row.title_original}
         </Link>
-        {row.title_translated ? (
-          <p className="text-muted-foreground mt-0.5 line-clamp-1 text-xs">{row.title_original}</p>
-        ) : null}
       </TableCell>
       <TableCell className="text-muted-foreground text-xs">
         {row.category_name} → {row.subcategory_name}
       </TableCell>
       <TableCell>
-        <Badge variant="secondary">{row.language_name_english}</Badge>
+        {row.variants.length === 0 ? (
+          <span className="text-muted-foreground text-xs italic">none</span>
+        ) : (
+          <div className="flex flex-wrap gap-1">
+            {row.variants.slice(0, 3).map((v) => (
+              <Badge
+                key={v.id}
+                variant={v.status === "published" ? "default" : "outline"}
+                className="text-[10px]"
+                title={`${v.language_name_english} · ${v.tone_name} · ${v.status}`}
+              >
+                {v.language_name_english} · {v.tone_name}
+              </Badge>
+            ))}
+            {row.variants.length > 3 ? (
+              <Badge variant="secondary" className="text-[10px]">
+                +{row.variants.length - 3}
+              </Badge>
+            ) : null}
+            <span className="text-muted-foreground self-center text-[10px]">
+              {publishedVariants}/{row.variants.length} pub
+            </span>
+          </div>
+        )}
       </TableCell>
-      <TableCell className="text-muted-foreground text-xs">{row.tone_name}</TableCell>
-      <TableCell className="text-right tabular-nums">
-        <span className={row.completed_parts === row.total_parts ? "text-foreground" : "text-muted-foreground"}>
-          {row.completed_parts}/{row.total_parts}
-        </span>
-      </TableCell>
+      <TableCell className="text-right tabular-nums">{row.total_parts}</TableCell>
       <TableCell className="text-center">
         <Badge variant={row.status === "published" ? "default" : "outline"}>{row.status}</Badge>
       </TableCell>
@@ -239,8 +262,8 @@ function StoryTableRow({ row }: { row: StoryRow }) {
             {row.status === "published" ? "Unpublish" : "Publish"}
           </Button>
           <DeleteConfirmDialog
-            title={`Delete "${row.title_translated ?? row.title_original}"?`}
-            description="The story is hidden from readers (soft delete). Parts and translation history are preserved."
+            title={`Delete "${row.title_original}"?`}
+            description="The story (and all variants) is hidden from readers. Translations are preserved."
             onConfirm={() => deleteStory(row.id)}
             successMessage="Story deleted."
           />

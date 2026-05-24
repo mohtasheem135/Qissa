@@ -36,7 +36,9 @@ export default async function HomePage() {
   if (recentErr) throw recentErr;
   if (catErr) throw catErr;
 
-  const stories = (recent ?? []).map(toStoryCard);
+  const stories = (recent ?? [])
+    .map(toStoryCard)
+    .filter((s): s is NonNullable<typeof s> => s !== null);
 
   // De-dup categories (embedded join can repeat rows) + count stories.
   const categoryRows: CategoryTileData[] = [];

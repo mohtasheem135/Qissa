@@ -8,19 +8,19 @@ Two endpoints share the same per-part flow.
 
 **File:** [app/api/translate/route.ts](../../app/api/translate/route.ts)
 
-Translate one part end-to-end.
+Translate one (variant × part) end-to-end. The input is a `story_part_translations.id`.
 
 ### Request
 
 ```jsonc
 {
-  "storyPartId": "uuid",
+  "storyPartTranslationId": "uuid",
   "providerName": "gemini" | "groq" | "openrouter" | "openai" | "anthropic", // optional override
   "modelName": "gemini-2.5-flash" // optional override
 }
 ```
 
-If `providerName` / `modelName` are omitted, falls back to the story's `ai_provider` / `ai_model` columns, then to the `ai_config` singleton's defaults.
+If `providerName` / `modelName` are omitted, falls back to the parent variant's `ai_provider` / `ai_model` columns, then to the `ai_config` singleton's defaults.
 
 ### Response (success — HTTP 200)
 
@@ -53,12 +53,12 @@ Status code = the provider's HTTP status when applicable (e.g., 429, 503), other
 
 All inside [lib/translation/run-part.ts](../../lib/translation/run-part.ts) → `runStoryPartTranslation`:
 
-1. `story_parts.status = 'translating'` immediately (UI shows the spinner)
-2. Each retry attempt → row in `translation_jobs` with `status='failed'` + error message + duration
+1. `story_part_translations.status = 'translating'` immediately (UI shows the spinner)
+2. Each retry attempt → row in `translation_jobs` with `status='failed'` + error message + duration + `variant_id` + `story_part_translation_id`
 3. On success: row in `translation_jobs` with `status='succeeded'` + token counts
-4. On success: row in `story_part_versions` with auto-incremented `version_number`
-5. On success: `story_parts.update` — text, word counts, `status='completed'`, provider/model snapshot
-6. On final failure: `story_parts.update` — `status='failed'`, `error_message`
+4. On success: row in `story_part_versions` with auto-incremented `version_number`, scoped to this `story_part_translation_id`
+5. On success: `story_part_translations.update` — text, word count, `status='completed'`, provider/model snapshot, `translated_at`
+6. On final failure: `story_part_translations.update` — `status='failed'`, `error_message`
 
 ---
 
@@ -66,13 +66,13 @@ All inside [lib/translation/run-part.ts](../../lib/translation/run-part.ts) → 
 
 **File:** [app/api/translate/queue/route.ts](../../app/api/translate/queue/route.ts)
 
-SSE stream that translates every `pending` or `failed` part of a story in order.
+SSE stream that translates every `pending` or `failed` `story_part_translations` row of one variant in part-number order.
 
 ### Request
 
 ```jsonc
 {
-  "storyId": "uuid",
+  "variantId": "uuid",
   "fromPartNumber": 3,                            // optional — translate from this part onward
   "providerName": "...",                          // optional override (passed through to run-part)
   "modelName": "..."                              // optional override
@@ -94,10 +94,10 @@ Body: newline-delimited JSON events, each as `data: …\n\n`:
 
 | Event | Fields |
 |---|---|
-| `queue_started` | `totalParts`, `storyId` |
-| `part_started` | `partId`, `partNumber` |
-| `part_completed` | `partId`, `partNumber`, `translatedText`, `modelUsed`, `tokensUsed`, `durationMs` |
-| `part_failed` | `partId`, `partNumber`, `error`, `durationMs` |
+| `queue_started` | `totalParts`, `variantId` |
+| `part_started` | `translationId`, `partId`, `partNumber` |
+| `part_completed` | `translationId`, `partId`, `partNumber`, `translatedText`, `modelUsed`, `tokensUsed`, `durationMs` |
+| `part_failed` | `translationId`, `partId`, `partNumber`, `error`, `durationMs` |
 | `queue_done` | `completed`, `failed` |
 | `queue_cancelled` | `completed`, `failed` (emitted when `request.signal.aborted` checked between parts) |
 | `queue_error` | `error`, `completed`, `failed` (something threw out of the loop) |

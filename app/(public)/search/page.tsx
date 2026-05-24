@@ -56,13 +56,18 @@ async function runSearch(query: string) {
   const safe = query.replace(/[%_]/g, "\\$&");
   const pattern = `%${safe}%`;
 
+  // We search original-title only for now; cross-variant translated-title
+  // search needs a join-aware OR which Postgrest doesn't express cleanly.
+  // Phase 1.5 can swap this for a /rpc fts query that unions both columns.
   const { data, error } = await supabase
     .from("stories")
     .select(STORY_CARD_COLUMNS)
-    .or(`title_original.ilike.${pattern},title_translated.ilike.${pattern}`)
+    .ilike("title_original", pattern)
     .order("published_at", { ascending: false })
     .limit(60);
 
   if (error) throw error;
-  return (data ?? []).map(toStoryCard);
+  return (data ?? [])
+    .map(toStoryCard)
+    .filter((s): s is NonNullable<typeof s> => s !== null);
 }

@@ -6,28 +6,35 @@ import type { ProviderId } from "@/lib/ai/registry";
 /**
  * POST /api/translate
  *
- * Body: { storyPartId, providerName?, modelName? }
+ * Body: { storyPartTranslationId, providerName?, modelName? }
  *
- * Single-part translation. All persistence + retry + version + job-log
- * logic lives in lib/translation/run-part.ts (shared with the queue
+ * Single (variant, part) translation. All persistence + retry + version +
+ * job-log logic lives in lib/translation/run-part.ts (shared with the queue
  * endpoint).
  */
 export async function POST(request: Request): Promise<Response> {
   await requireAdmin();
 
-  let body: { storyPartId?: string; providerName?: string; modelName?: string } = {};
+  let body: {
+    storyPartTranslationId?: string;
+    providerName?: string;
+    modelName?: string;
+  } = {};
   try {
     body = (await request.json()) as typeof body;
   } catch {
     return NextResponse.json({ ok: false, error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const storyPartId = body.storyPartId?.trim();
-  if (!storyPartId) {
-    return NextResponse.json({ ok: false, error: "storyPartId is required." }, { status: 400 });
+  const storyPartTranslationId = body.storyPartTranslationId?.trim();
+  if (!storyPartTranslationId) {
+    return NextResponse.json(
+      { ok: false, error: "storyPartTranslationId is required." },
+      { status: 400 },
+    );
   }
 
-  const result = await runStoryPartTranslation(storyPartId, {
+  const result = await runStoryPartTranslation(storyPartTranslationId, {
     providerName: body.providerName as ProviderId | undefined,
     modelName: body.modelName,
     signal: request.signal,

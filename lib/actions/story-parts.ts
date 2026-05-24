@@ -5,93 +5,124 @@ import { requireAdmin } from "@/lib/auth/check-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 import { wordCount } from "@/lib/utils/word-count";
+import {
+  syncAllVariantAggregatesForStory,
+  syncStoryAggregates,
+  syncVariantAggregates,
+} from "@/lib/translation/aggregates";
 
 type StoryPartUpdate = Database["public"]["Tables"]["story_parts"]["Update"];
+type TranslationUpdate = Database["public"]["Tables"]["story_part_translations"]["Update"];
 
 interface UpdatePartTextsInput {
   partId: string;
+  /** When supplied, edits the shared original text + label on story_parts. */
   textOriginal?: string;
-  textTranslated?: string | null;
   partLabel?: string | null;
+  /**
+   * When supplied, edits one variant's translation (story_part_translations).
+   * Requires translationId so the edit targets the right (variant, part) row.
+   */
+  translationId?: string;
+  textTranslated?: string | null;
 }
 
 /**
- * Save edits to a part's text fields. Translated edits mark status='edited'
- * AND create a new story_part_versions row (so the prior AI translation
- * stays accessible via the version history). Original edits don't make a
- * version; they're considered source-of-truth changes.
+ * Save edits to a part's text fields. Original/label edits hit story_parts
+ * (shared across all variants). Translation edits hit one specific
+ * story_part_translations row, flip its status to 'edited', and snapshot the
+ * prior translation as a story_part_versions row (history preserved).
  */
 export async function updatePartTexts(input: UpdatePartTextsInput): Promise<void> {
   await requireAdmin();
   const admin = createAdminClient();
 
-  // Pull the current row so we know if text_translated actually changed
-  // (avoids creating no-op versions when the admin just touched the original).
-  const { data: existing, error: fetchErr } = await admin
-    .from("story_parts")
-    .select("story_id, text_translated, last_provider_used, last_model_used")
-    .eq("id", input.partId)
-    .single();
-  if (fetchErr || !existing) {
-    throw new Error(fetchErr?.message ?? "Story part not found.");
-  }
-
-  const updates: StoryPartUpdate = {};
-  let translatedChanged = false;
-
-  if (typeof input.partLabel !== "undefined") {
-    updates.part_label = input.partLabel;
-  }
+  // 1) Original / label updates on the shared part row.
+  const partUpdates: StoryPartUpdate = {};
+  if (typeof input.partLabel !== "undefined") partUpdates.part_label = input.partLabel;
   if (typeof input.textOriginal === "string") {
-    updates.text_original = input.textOriginal;
-    updates.word_count_original = wordCount(input.textOriginal);
+    partUpdates.text_original = input.textOriginal;
+    partUpdates.word_count_original = wordCount(input.textOriginal);
   }
+
+  let storyId: string | null = null;
+
+  if (Object.keys(partUpdates).length > 0) {
+    const { data: updated, error: updateErr } = await admin
+      .from("story_parts")
+      .update(partUpdates)
+      .eq("id", input.partId)
+      .select("story_id")
+      .single();
+    if (updateErr) throw new Error(updateErr.message);
+    storyId = updated?.story_id ?? null;
+  }
+
+  // 2) Translation edit on one specific variant's translation row.
   if (typeof input.textTranslated !== "undefined") {
+    if (!input.translationId) {
+      throw new Error("translationId is required when editing translated text.");
+    }
+    const { data: existing, error: fetchErr } = await admin
+      .from("story_part_translations")
+      .select("text, variant_id, ai_provider, ai_model, story_part_id, part:story_parts!inner(story_id)")
+      .eq("id", input.translationId)
+      .single();
+    if (fetchErr || !existing) {
+      throw new Error(fetchErr?.message ?? "Translation row not found.");
+    }
+    if (existing.story_part_id !== input.partId) {
+      throw new Error("translationId does not belong to the supplied partId.");
+    }
+    storyId = storyId ?? existing.part?.story_id ?? null;
+
     const next = input.textTranslated ?? "";
-    if (next !== (existing.text_translated ?? "")) {
-      updates.text_translated = next;
-      updates.word_count_translated = wordCount(next);
-      updates.status = next.length > 0 ? "edited" : "pending";
-      translatedChanged = true;
+    if (next !== (existing.text ?? "")) {
+      const updates: TranslationUpdate = {
+        text: next,
+        word_count: wordCount(next),
+        status: next.length > 0 ? "edited" : "pending",
+      };
+      const { error: trErr } = await admin
+        .from("story_part_translations")
+        .update(updates)
+        .eq("id", input.translationId);
+      if (trErr) throw new Error(trErr.message);
+
+      // Snapshot the previous translation only when it was non-empty.
+      if (existing.text && existing.text.length > 0) {
+        const { data: latest } = await admin
+          .from("story_part_versions")
+          .select("version_number")
+          .eq("story_part_translation_id", input.translationId)
+          .order("version_number", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const nextVersion = (latest?.version_number ?? 0) + 1;
+
+        await admin.from("story_part_versions").insert({
+          story_part_id: input.partId,
+          story_part_translation_id: input.translationId,
+          variant_id: existing.variant_id,
+          version_number: nextVersion,
+          translated_text: next,
+          provider_used: existing.ai_provider,
+          model_used: existing.ai_model,
+          created_by: "admin",
+        });
+      }
+
+      await syncVariantAggregates(existing.variant_id);
     }
   }
 
-  if (Object.keys(updates).length === 0) return;
-
-  const { error: updateErr } = await admin
-    .from("story_parts")
-    .update(updates)
-    .eq("id", input.partId);
-  if (updateErr) throw new Error(updateErr.message);
-
-  // Snapshot the previous translation as a version *only* when the
-  // translated text actually changed and the prior value was non-empty.
-  if (translatedChanged && existing.text_translated && existing.text_translated.length > 0) {
-    const { data: latest } = await admin
-      .from("story_part_versions")
-      .select("version_number")
-      .eq("story_part_id", input.partId)
-      .order("version_number", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const nextVersion = (latest?.version_number ?? 0) + 1;
-
-    await admin.from("story_part_versions").insert({
-      story_part_id: input.partId,
-      version_number: nextVersion,
-      translated_text: input.textTranslated ?? "",
-      provider_used: existing.last_provider_used,
-      model_used: existing.last_model_used,
-      created_by: "admin",
-    });
-  }
-
-  revalidatePath(`/admin/stories/${existing.story_id}`);
+  if (storyId) revalidatePath(`/admin/stories/${storyId}`);
 }
 
 /**
- * Add an empty trailing part. The admin fills text on the edit page,
- * then translates from the new part onward.
+ * Add an empty trailing part. Inserts the shared story_parts row AND seeds a
+ * pending story_part_translations row for every active variant of this story
+ * so the queue can pick it up uniformly.
  */
 export async function addStoryPart(storyId: string): Promise<{ partId: string }> {
   await requireAdmin();
@@ -106,7 +137,7 @@ export async function addStoryPart(storyId: string): Promise<{ partId: string }>
     .maybeSingle();
   const nextNumber = (last?.part_number ?? 0) + 1;
 
-  const { data, error } = await admin
+  const { data: newPart, error } = await admin
     .from("story_parts")
     .insert({
       story_id: storyId,
@@ -116,11 +147,27 @@ export async function addStoryPart(storyId: string): Promise<{ partId: string }>
     })
     .select("id")
     .single();
-  if (error || !data) throw new Error(error?.message ?? "Could not add part.");
+  if (error || !newPart) throw new Error(error?.message ?? "Could not add part.");
+
+  // Seed pending translations for every active variant.
+  const { data: variants } = await admin
+    .from("story_variants")
+    .select("id")
+    .eq("story_id", storyId)
+    .eq("is_active", true);
+
+  if (variants && variants.length > 0) {
+    const rows = variants.map((v) => ({
+      variant_id: v.id,
+      story_part_id: newPart.id,
+      status: "pending" as const,
+    }));
+    await admin.from("story_part_translations").insert(rows);
+  }
 
   await syncStoryAggregates(storyId);
   revalidatePath(`/admin/stories/${storyId}`);
-  return { partId: data.id };
+  return { partId: newPart.id };
 }
 
 export async function deleteStoryPart(partId: string): Promise<{ error: string | null }> {
@@ -134,6 +181,7 @@ export async function deleteStoryPart(partId: string): Promise<{ error: string |
       .single();
     if (!part) return { error: "Part not found." };
 
+    // Cascade deletes story_part_translations for every variant.
     const { error: delErr } = await admin.from("story_parts").delete().eq("id", partId);
     if (delErr) return { error: delErr.message };
 
@@ -157,6 +205,7 @@ export async function deleteStoryPart(partId: string): Promise<{ error: string |
     }
 
     await syncStoryAggregates(part.story_id);
+    await syncAllVariantAggregatesForStory(part.story_id);
     revalidatePath(`/admin/stories/${part.story_id}`);
     return { error: null };
   } catch (err) {
@@ -215,11 +264,11 @@ export async function moveStoryPart(
 
 /**
  * Restore a previous translation version. Bumps the version_number forward
- * (i.e., creates a NEW version that happens to hold old text) so the
- * audit trail is preserved.
+ * (creates a NEW version that holds the old text) so the audit trail is
+ * preserved. Operates per-translation (i.e. one specific variant's history).
  */
 export async function restorePartVersion(
-  partId: string,
+  translationId: string,
   versionId: string,
 ): Promise<{ error: string | null }> {
   try {
@@ -228,7 +277,9 @@ export async function restorePartVersion(
 
     const { data: version, error: fetchErr } = await admin
       .from("story_part_versions")
-      .select("translated_text, provider_used, model_used, tone_id, complexity, custom_instructions")
+      .select(
+        "translated_text, provider_used, model_used, tone_id, complexity, custom_instructions, story_part_id, variant_id",
+      )
       .eq("id", versionId)
       .single();
     if (fetchErr || !version) return { error: fetchErr?.message ?? "Version not found." };
@@ -236,14 +287,16 @@ export async function restorePartVersion(
     const { data: latest } = await admin
       .from("story_part_versions")
       .select("version_number")
-      .eq("story_part_id", partId)
+      .eq("story_part_translation_id", translationId)
       .order("version_number", { ascending: false })
       .limit(1)
       .maybeSingle();
     const nextVersion = (latest?.version_number ?? 0) + 1;
 
     await admin.from("story_part_versions").insert({
-      story_part_id: partId,
+      story_part_id: version.story_part_id,
+      story_part_translation_id: translationId,
+      variant_id: version.variant_id,
       version_number: nextVersion,
       translated_text: version.translated_text,
       provider_used: version.provider_used,
@@ -254,54 +307,25 @@ export async function restorePartVersion(
       created_by: "admin",
     });
 
-    const { data: part } = await admin
-      .from("story_parts")
-      .select("story_id")
-      .eq("id", partId)
+    await admin
+      .from("story_part_translations")
+      .update({
+        text: version.translated_text,
+        status: "edited",
+        word_count: wordCount(version.translated_text),
+      })
+      .eq("id", translationId);
+
+    const { data: tr } = await admin
+      .from("story_part_translations")
+      .select("variant_id, part:story_parts!inner(story_id)")
+      .eq("id", translationId)
       .single();
 
-    await admin
-      .from("story_parts")
-      .update({
-        text_translated: version.translated_text,
-        status: "edited",
-        word_count_translated: wordCount(version.translated_text),
-      })
-      .eq("id", partId);
-
-    if (part?.story_id) revalidatePath(`/admin/stories/${part.story_id}`);
+    if (tr?.variant_id) await syncVariantAggregates(tr.variant_id);
+    if (tr?.part?.story_id) revalidatePath(`/admin/stories/${tr.part.story_id}`);
     return { error: null };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Unknown error." };
   }
-}
-
-/**
- * Recompute `stories.total_parts`, total_words_*, estimated_reading_minutes
- * from the live story_parts rows. Called whenever parts change in
- * cardinality or word count.
- */
-async function syncStoryAggregates(storyId: string): Promise<void> {
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("story_parts")
-    .select("word_count_original, word_count_translated")
-    .eq("story_id", storyId);
-
-  const totalWordsOriginal = (data ?? []).reduce((s, p) => s + (p.word_count_original ?? 0), 0);
-  const totalWordsTranslated = (data ?? []).reduce(
-    (s, p) => s + (p.word_count_translated ?? 0),
-    0,
-  );
-  const totalParts = data?.length ?? 0;
-
-  await admin
-    .from("stories")
-    .update({
-      total_parts: totalParts,
-      total_words_original: totalWordsOriginal,
-      total_words_translated: totalWordsTranslated,
-      estimated_reading_minutes: Math.max(1, Math.ceil(totalWordsOriginal / 200)),
-    })
-    .eq("id", storyId);
 }

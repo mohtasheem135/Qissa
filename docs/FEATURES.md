@@ -30,7 +30,7 @@ Source of truth for **what** features should exist: [01-requirements.md](./01-re
 ### Search
 - **URL:** `/search?q=…`
 - **Page:** [app/(public)/search/page.tsx](../app/(public)/search/page.tsx)
-- **Backed by:** Postgres ILIKE on `title_original` + `title_translated`; pg_trgm GIN indexes from [migration 0001](../supabase/migrations/20260522120001_initial.sql) keep it fast
+- **Backed by:** Postgres ILIKE on `stories.title_original` (pg_trgm GIN index from [migration 0001](../supabase/migrations/20260522120001_initial.sql)); per-variant translated-title search is deferred to Phase 1.5 since it needs a join-aware OR or an RPC
 - **Doc:** [UI/public.md](./UI/public.md)
 
 ### Bookmarks
@@ -44,13 +44,15 @@ Source of truth for **what** features should exist: [01-requirements.md](./01-re
 ### Story landing
 - **URL:** `/s/[storyId]`
 - **Page:** [app/(public)/s/[storyId]/page.tsx](../app/(public)/s/[storyId]/page.tsx)
-- **Shows:** cover (heroUrl), title in target language's reading font + `dir`, badges, Start Reading button, parts list with per-part read indicator, Bookmark + Share
-- **Read indicator:** [PartReadIndicator](../components/shared/PartReadIndicator.tsx) — ✓ / partial / outline circle from localStorage progress; updates live via `qissa:progress-changed` event
+- **Shows:** cover (heroUrl), source title, badges, Start Reading button (routes to the primary variant's part 1), **"Available in" grid** of every published variant, parts list with per-part read indicator, Bookmark + Share, **"Request another translation" CTA** ([RequestStoryDialog](../components/shared/RequestStoryDialog.tsx))
+- **Read indicator:** [PartReadIndicator](../components/shared/PartReadIndicator.tsx) — ✓ / partial / outline circle from variant-scoped localStorage progress; updates live via `qissa:progress-changed` event
 - **Doc:** [UI/public.md](./UI/public.md)
 
 ### Reader experience (the showpiece)
-- **URL:** `/s/[storyId]/p/[partNumber]`
-- **Page:** [app/(public)/s/[storyId]/p/[partNumber]/page.tsx](../app/(public)/s/[storyId]/p/[partNumber]/page.tsx)
+- **URL:** `/s/[storyId]/[variantSlug]/p/[partNumber]` (the old `/s/[storyId]/p/[partNumber]` redirects to the primary variant)
+- **Page:** [app/(public)/s/[storyId]/[variantSlug]/p/[partNumber]/page.tsx](../app/(public)/s/[storyId]/[variantSlug]/p/[partNumber]/page.tsx)
+- **Legacy redirect:** [app/(public)/s/[storyId]/p/[partNumber]/page.tsx](../app/(public)/s/[storyId]/p/[partNumber]/page.tsx) — 307s to the primary published variant; if none exists, 307s to the story landing `/s/<id>` instead of 404-ing
+- **Variant picker:** [ReaderChrome](../components/reader/ReaderChrome.tsx) renders a `<Select>` in the top bar when the story has ≥2 published variants; switching navigates to the same part number in the target variant (clamped to its totalParts)
 - **Orchestrator:** [ReaderShell](../components/reader/ReaderShell.tsx)
 - **Sub-components:** [ReaderChrome](../components/reader/ReaderChrome.tsx) · [ReaderBody](../components/reader/ReaderBody.tsx) · [ReaderSettings](../components/reader/ReaderSettings.tsx) · [FontControls](../components/reader/FontControls.tsx) · [ProgressBar](../components/reader/ProgressBar.tsx)
 - **5 themes:** [lib/reader/themes.ts](../lib/reader/themes.ts) (Day · Sepia · Night · Gray · Focus)
@@ -79,6 +81,13 @@ Source of truth for **what** features should exist: [01-requirements.md](./01-re
 - **Gating:** user has read ≥1 story (`qissa:last-read` exists) AND hasn't dismissed in 7d
 - **Manifest:** [app/manifest.ts](../app/manifest.ts), icons under [public/icons/](../public/icons/)
 - **Doc:** [INTERNALS/pwa-service-worker.md](./INTERNALS/pwa-service-worker.md)
+
+### Request a translation / new story
+- **Dialog:** [RequestStoryDialog](../components/shared/RequestStoryDialog.tsx) — language + tone selects, optional title/author/notes/email, hidden honeypot
+- **API:** [`POST /api/requests`](../app/api/requests/route.ts) — honeypot, in-memory IP rate-limit (5/hr), dedupe (matching open requests bump votes instead of inserting)
+- **Vote API:** [`POST /api/requests/[id]/vote`](../app/api/requests/[id]/vote/route.ts) — per-IP `sha256(ip+salt)` dedupe via `story_request_votes`
+- **Triggered from:** story landing page "Request another translation" CTA (preset to `type='new_variant'`)
+- **Doc:** [04-database.md §4.12–§4.13](./04-database.md#412-story_requests)
 
 ---
 
@@ -157,21 +166,31 @@ Source of truth for **what** features should exist: [01-requirements.md](./01-re
 - **Action:** [createStory](../lib/actions/stories.ts) — atomic story+parts insert with rollback on parts failure
 - **Doc:** [UI/admin.md](./UI/admin.md)
 
-### Edit story (metadata + parts + translation)
+### Edit story (source + variants + translation)
 - **URL:** `/admin/stories/[id]`
 - **Page:** [app/admin/(protected)/stories/[id]/page.tsx](../app/admin/(protected)/stories/[id]/page.tsx)
-- **Shell:** [StoryEditShell](../components/admin/StoryEditShell.tsx)
-- **Parts editor:** [PartCard](../components/admin/PartCard.tsx) — inline label, original (collapsed/edit), translated (always editable, autosave on blur), per-part Re-translate, ↑↓ reorder, version history, delete
-- **Metadata dialog:** [EditStoryMetadataDialog](../components/admin/EditStoryMetadataDialog.tsx) — same cascades + cover re-upload
-- **Translate queue:** SSE consumer in `StoryEditShell` — live badges, Cancel button
-- **Version history:** [VersionHistoryDialog](../components/admin/VersionHistoryDialog.tsx) — list newest-first, Restore creates a new version with old text
-- **Actions:** [updatePartTexts](../lib/actions/story-parts.ts), [moveStoryPart](../lib/actions/story-parts.ts), [deleteStoryPart](../lib/actions/story-parts.ts), [restorePartVersion](../lib/actions/story-parts.ts), [updateStoryFromForm](../lib/actions/stories.ts), [setStoryPublished](../lib/actions/stories.ts), [deleteStory](../lib/actions/stories.ts)
+- **Shell:** [StoryEditShell](../components/admin/StoryEditShell.tsx) — **tabbed layout** (built on [components/ui/tabs.tsx](../components/ui/tabs.tsx)): one **Source** tab + one tab per variant; tab labels show `Language · Tone`, a ★ on the primary variant, and a `translatedCount/totalParts` progress badge; **+ Add variant** trigger sits next to the tab strip; the active variant tab defaults to the primary
+- **Source tab:** [SourcePartRow](../components/admin/SourcePartRow.tsx) list — label, original text, reorder ↑↓, delete (cascades to every variant's translation of that part) — plus **+ Add empty part**
+- **Variant tab:** [VariantPanel](../components/admin/VariantPanel.tsx) — translate queue (SSE), publish toggle, set primary, delete variant, per-(variant, part) [PartCard](../components/admin/PartCard.tsx) editor with autosave on blur, per-part Re-translate, version history
+- **Variant tabs use `forceMount`** ([StoryEditShell.tsx](../components/admin/StoryEditShell.tsx)) so a running translate queue isn't aborted when switching tabs
+- **Add variant:** [CreateVariantDialog](../components/admin/CreateVariantDialog.tsx) — language + tone + complexity + provider/model + optional "set as primary"
+- **Metadata dialog:** [EditStoryMetadataDialog](../components/admin/EditStoryMetadataDialog.tsx) — source fields only (title, author, source URL, category, subcategory, cover); per-variant fields are edited inside each VariantPanel
+- **Version history:** [VersionHistoryDialog](../components/admin/VersionHistoryDialog.tsx) — per (variant, part); Restore creates a new version with old text
+- **Actions:** [updatePartTexts](../lib/actions/story-parts.ts), [moveStoryPart](../lib/actions/story-parts.ts), [deleteStoryPart](../lib/actions/story-parts.ts), [restorePartVersion](../lib/actions/story-parts.ts), [updateStoryFromForm](../lib/actions/stories.ts), [setStoryPublished](../lib/actions/stories.ts), [deleteStory](../lib/actions/stories.ts), [createVariant / setVariantPublished / setVariantPrimary / deleteVariant](../lib/actions/story-variants.ts)
 - **Doc:** [UI/admin.md](./UI/admin.md)
 
 ### Translation queue (live)
-- **API:** [/api/translate/queue](../app/api/translate/queue/route.ts) — SSE; client uses `fetch().body.getReader()`
-- **Core:** [lib/translation/run-part.ts](../lib/translation/run-part.ts) — shared per-part flow
+- **API:** [/api/translate/queue](../app/api/translate/queue/route.ts) — SSE; client uses `fetch().body.getReader()`. Body: `{ variantId, fromPartNumber? }`
+- **Core:** [lib/translation/run-part.ts](../lib/translation/run-part.ts) — shared per-(variant, part) flow; input is a `story_part_translations.id`
 - **Doc:** [API/translate.md](./API/translate.md)
+
+### Story requests — admin triage
+- **URL:** `/admin/requests`
+- **Page:** [app/admin/(protected)/requests/page.tsx](../app/admin/(protected)/requests/page.tsx)
+- **Panel:** [RequestsPanel](../components/admin/RequestsPanel.tsx) — filterable table, inline status dropdown, expandable notes editor, linked-variant pill, delete
+- **Actions:** [updateRequestStatus / linkFulfillingVariant / updateRequestAdminNote / deleteRequest](../lib/actions/story-requests.ts)
+- **Sidebar entry:** [SidebarNav](../components/admin/SidebarNav.tsx) "Requests"
+- **Doc:** [04-database.md §4.12](./04-database.md#412-story_requests)
 
 ---
 
@@ -185,7 +204,7 @@ See [INTERNALS/pwa-service-worker.md](./INTERNALS/pwa-service-worker.md).
 - **Public segment error:** [app/(public)/error.tsx](../app/(public)/error.tsx)
 
 ### SEO
-- **Sitemap:** [app/sitemap.ts](../app/sitemap.ts) — static entries + every published story + active subcategory; ISR revalidate 1h
+- **Sitemap:** [app/sitemap.ts](../app/sitemap.ts) — static entries + each active category/subcategory + each published story landing + **one entry per published variant** (`/s/<id>/<slug>/p/1`); ISR revalidate 1h
 - **Robots:** [app/robots.ts](../app/robots.ts) — allow `/`, disallow `/admin` + `/api`
 - **Metadata:** root layout sets OpenGraph + Twitter + appleWebApp + `metadataBase` from `NEXT_PUBLIC_APP_URL`
 - **Per-page titles:** every page exports `generateMetadata` or `metadata`

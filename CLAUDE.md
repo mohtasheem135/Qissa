@@ -79,6 +79,8 @@ The docs are **living** — keep them in sync with code.
 | `lib/imagekit/*` or cover handling | [docs/INTERNALS/imagekit.md](./docs/INTERNALS/imagekit.md) |
 | `public/sw.js`, manifest, install prompt, icons | [docs/INTERNALS/pwa-service-worker.md](./docs/INTERNALS/pwa-service-worker.md) |
 | A SQL migration | [docs/04-database.md](./docs/04-database.md) (single source of truth for the schema) |
+| `lib/translation/*` or `lib/actions/story-variants.ts` | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) §5 + [docs/04-database.md](./docs/04-database.md) §4.10–§4.11 |
+| `app/api/requests/*` or `lib/actions/story-requests.ts` | [docs/API/requests.md](./docs/API/requests.md) + [docs/04-database.md](./docs/04-database.md) §4.12–§4.13 |
 | A new feature surfaced to users | [docs/FEATURES.md](./docs/FEATURES.md) entry + link to relevant UI/API/INTERNALS docs |
 
 When the code and a doc disagree, **treat the code as truth and update the doc**.
