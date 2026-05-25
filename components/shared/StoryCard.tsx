@@ -3,6 +3,7 @@ import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { thumbnailUrl } from "@/lib/imagekit/url";
 import { languageFontStyle } from "@/lib/i18n/fonts";
+import { toTitleCase } from "@/lib/utils/title-case";
 
 export interface StoryCardData {
   id: string;
@@ -72,10 +73,12 @@ export function StoryCard({ story, variant = "default" }: StoryCardProps) {
           className="text-foreground line-clamp-2 text-base leading-snug font-medium"
           style={titleFontStyle}
         >
-          {story.title_translated ?? story.title_original}
+          {toTitleCase(story.title_translated ?? story.title_original)}
         </h3>
         {story.title_translated ? (
-          <p className="text-muted-foreground line-clamp-1 text-xs">{story.title_original}</p>
+          <p className="text-muted-foreground line-clamp-1 text-xs">
+            {toTitleCase(story.title_original)}
+          </p>
         ) : null}
         <p className="text-muted-foreground flex flex-wrap items-center gap-1.5 text-xs">
           {story.tone_name ? (

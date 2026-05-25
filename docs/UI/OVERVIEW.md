@@ -10,10 +10,13 @@ The App Router file tree under [app/](../../app/) drives all routing. Two top-le
 
 ```
 /                                ─ Home                       app/(public)/page.tsx
+/browse                          ─ All categories             app/(public)/browse/page.tsx
 /c/[categorySlug]                ─ Category landing           app/(public)/c/[categorySlug]/page.tsx
 /c/[categorySlug]/[subcategorySlug] ─ Story grid              app/(public)/c/[categorySlug]/[subcategorySlug]/page.tsx
 /s/[storyId]                     ─ Story landing              app/(public)/s/[storyId]/page.tsx
-/s/[storyId]/p/[partNumber]      ─ Reader                     app/(public)/s/[storyId]/p/[partNumber]/page.tsx
+/s/[storyId]/p/[partNumber]      ─ Reader (legacy redirect)   app/(public)/s/[storyId]/p/[partNumber]/page.tsx
+/s/[storyId]/[variantSlug]/p/[partNumber] ─ Variant reader    app/(public)/s/[storyId]/[variantSlug]/p/[partNumber]/page.tsx
+/s/[storyId]/source/p/[partNumber] ─ Source reader            app/(public)/s/[storyId]/source/p/[partNumber]/page.tsx
 /search                          ─ Search                     app/(public)/search/page.tsx
 /bookmarks                       ─ Bookmarks (client-only)    app/(public)/bookmarks/page.tsx
 /offline                         ─ SW fallback                app/(public)/offline/page.tsx
@@ -59,7 +62,7 @@ A thin wrapper that mounts [PublicShell](../../components/shared/PublicShell.tsx
 
 - **Top bar**: brand `Qissa` on the left; md+ shows nav links (Home / Search / Bookmarks)
 - **Bottom nav**: 4-icon dock, mobile-only (`md:hidden`)
-- **Reader-route special case:** `/s/<id>/p/<n>` regex → renders only `<main>` (no top bar, no bottom nav). The reader has its own [ReaderChrome](../../components/reader/ReaderChrome.tsx).
+- **Reader-route special case:** regex `^/s/<id>(/<variantSlug>)?/p/<n>` matches both the current variant URL and the legacy single-segment shape → renders only `<main>` (no top bar, no bottom nav, no [NavProgress](../../components/shared/NavProgress.tsx)). The reader has its own [ReaderChrome](../../components/reader/ReaderChrome.tsx). The optional variant segment in the regex matters — without it, the actual reader URL falls through to the public shell and double-renders chrome.
 
 ### Admin: [app/admin/(protected)/layout.tsx](../../app/admin/(protected)/layout.tsx)
 
@@ -105,7 +108,14 @@ Reader-agnostic shared components under [components/shared/](../../components/sh
 
 ---
 
-## State that doesn't live in a component
+## Loading & progress
+
+Two complementary layers give felt feedback on every navigation:
+
+1. **Per-route [`loading.tsx`](https://nextjs.org/docs/app/api-reference/file-conventions/loading) skeletons.** Every public route has a sibling `loading.tsx` rendering a pulse-block stand-in for that page's layout. Shared primitives (`StoryCardSkeleton`, `CategoryTileSkeleton`, `ReaderParagraphSkeleton`, `TextLine`) live in [components/shared/skeletons.tsx](../../components/shared/skeletons.tsx) so per-route files stay tiny.
+2. **Top progress bar — [NavProgress](../../components/shared/NavProgress.tsx).** Mounted once inside [PublicShell](../../components/shared/PublicShell.tsx) (wrapped in `<Suspense>` because it uses `useSearchParams()`). Starts on any same-origin link click, finishes when the pathname or query actually changes. **Hidden inside the reader** — the reader has its own theme-tinted chrome and a fixed primary-color bar at the top would clash. Inside the reader, prev/next links use `useLinkStatus()` to swap their chevron for a spinner instead.
+
+
 
 | State | Owner | Doc |
 |---|---|---|

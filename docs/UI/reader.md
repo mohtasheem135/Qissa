@@ -41,16 +41,20 @@ The page fetches story + part + language metadata, computes prev/next hrefs, emi
 
 | State | Persisted | Notes |
 |---|---|---|
-| `settings: ReaderSettings` (theme, lineHeight, alignment, fontVariant, showOriginal) | `qissa:reader-settings` JSON | Default theme = `day`, default font = `serif`, default alignment = `justify` |
+| `settings: ReaderSettings` (theme, lineHeight, alignment, fontVariant, showOriginal) | `qissa:reader-settings` JSON | Default theme = `day`, default font = `serif`, default alignment = `justify`, `showOriginal: false` (translation-only by default) |
 | `fontSize: number` | `qissa:fontSize` integer (14–32) | Separate key — A−/A+ + pinch zoom hit it constantly |
-| `chromeVisible: boolean` | none | Auto-hide 3s; reset on scroll/touch/mousemove |
-| `settingsOpen: boolean` | none | While open, chrome auto-hide is paused (via `settingsOpenRef`) |
+| `settingsOpen: boolean` | none | Settings sheet open/close |
+| `fontControlsVisible: boolean` | none | Auto-hide 3s; resets on scroll / touchstart / mousemove (and on A−/A+ taps) |
+
+Top + bottom chrome are permanently visible — `chromeVisible` is pinned to `true` and the prop is still threaded through so a future explicit toggle can be wired in without rewiring [ReaderChrome](../../components/reader/ReaderChrome.tsx). The floating A−/A+ buttons get their own `fontControlsVisible` state with a 3s auto-hide so they don't sit on top of the prose once the reader has picked a size.
 
 All defaults are in [lib/reader/reader-settings.ts](../../lib/reader/reader-settings.ts) and [lib/reader/font-size.ts](../../lib/reader/font-size.ts).
 
 ### Hydration
 
 Server renders with `DEFAULT_SETTINGS` and `DEFAULT_FONT_SIZE` so the SSR HTML is deterministic. On mount, a `useEffect` defers `setSettings` + `setFontSize` to a microtask (React-19 lint avoidance), then swaps to persisted values. Body content is identical pre/post hydration → no hydration mismatch.
+
+A `hydratedRef = useRef(false)` flips to `true` *after* the microtask writes persisted state. The save-effect for `settings` gates on this ref — without it, the first commit (with `DEFAULT_SETTINGS`) would overwrite localStorage *before* the microtask reads from it, destroying the user's saved preferences on every part navigation. A ref (not state) avoids triggering an extra render / hydration mismatch.
 
 ### Progress save / restore
 
@@ -69,11 +73,11 @@ Server renders with `DEFAULT_SETTINGS` and `DEFAULT_FONT_SIZE` so the SSR HTML i
 
 ## ReaderChrome
 
-Top + bottom bars. Both fade together based on `visible`. Theme-aware via CSS custom properties (`var(--reader-chrome-bg)` etc.) set on the outer wrapper by [themeStyle(theme)](../../lib/reader/themes.ts).
+Top + bottom bars. Always visible (the `visible` prop is wired but ReaderShell pins it to `true` — see "State owned by ReaderShell" above). Theme-aware via CSS custom properties (`var(--reader-chrome-bg)` etc.) set on the outer wrapper by [themeStyle(theme)](../../lib/reader/themes.ts).
 
-**Top bar:** Back link to `/s/<id>` · centered "Part X / N" · settings gear · [ShareButton](../../components/shared/ShareButton.tsx) · [BookmarkButton](../../components/shared/BookmarkButton.tsx).
+**Top bar:** Back link to `/s/<id>` · variant picker (when ≥2 published variants) · centered "Part X / N" · settings gear · [ShareButton](../../components/shared/ShareButton.tsx) · [BookmarkButton](../../components/shared/BookmarkButton.tsx). The share title runs through [toTitleCase()](../../lib/utils/title-case.ts).
 
-**Bottom bar:** prev part button (disabled with 30% opacity when first) · `X / N` counter · next part button. Both prefetch via Next `<Link prefetch>`.
+**Bottom bar:** prev part button (disabled with 30% opacity when first) · `X / N` counter · next part button. Both prefetch via Next `<Link prefetch>`. Each link wraps an inner component that calls `useLinkStatus()` so the chevron swaps for a spinner (and `aria-busy` flips) while the next part is loading — the global [NavProgress](../../components/shared/NavProgress.tsx) bar is hidden inside the reader, so this is where pending feedback comes from.
 
 ---
 
@@ -127,7 +131,9 @@ Sections:
 
 ## FontControls
 
-[components/reader/FontControls.tsx](../../components/reader/FontControls.tsx) — floating A−/A+ buttons bottom-right (above the bottom chrome). Fade together with chrome via `visible` prop.
+[components/reader/FontControls.tsx](../../components/reader/FontControls.tsx) — floating A−/A+ buttons bottom-right (above the bottom chrome).
+
+**Auto-hide.** Driven by `fontControlsVisible` in [ReaderShell](../../components/reader/ReaderShell.tsx): starts `true`, hides 3s after the last interaction (scroll / touchstart / mousemove document listeners + an explicit reset inside `updateFontSize` so tapping A−/A+ also re-arms the timer). The top + bottom chrome do NOT share this state — only the floating buttons fade.
 
 Disabled at boundaries: A+ disabled when fontSize === 32, A− when 14.
 

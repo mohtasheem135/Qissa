@@ -98,6 +98,8 @@ function saveReaderSettings(next: ReaderSettings): void
 
 Whole blob is one localStorage key (`qissa:reader-settings`). On `getReaderSettings`, missing fields fall back to defaults — so adding a new field later doesn't break existing users.
 
+**Hydration gate.** [ReaderShell](../../components/reader/ReaderShell.tsx) holds a `hydratedRef = useRef(false)` and only flips it to `true` after the mount-time microtask has copied the persisted blob into state. The `useEffect` that calls `saveReaderSettings(settings)` early-returns until the ref is set. Without this gate the default-state render (which fires *before* the microtask) would round-trip defaults to localStorage, blowing away the user's theme/font/etc on every part navigation — the bug that motivated this comment.
+
 `LINE_HEIGHT_VALUES = { compact: 1.4, normal: 1.65, relaxed: 1.9 }` — used directly in [ReaderBody](../../components/reader/ReaderBody.tsx) `style.lineHeight`.
 
 ---

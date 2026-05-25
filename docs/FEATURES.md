@@ -44,8 +44,15 @@ Source of truth for **what** features should exist: [01-requirements.md](./01-re
 ### Story landing
 - **URL:** `/s/[storyId]`
 - **Page:** [app/(public)/s/[storyId]/page.tsx](../app/(public)/s/[storyId]/page.tsx)
-- **Shows:** cover (heroUrl), source title, badges, Start Reading button (routes to the primary variant's part 1), **"Available in" grid** of every published variant, parts list with per-part read indicator, Bookmark + Share, **"Request another translation" CTA** ([RequestStoryDialog](../components/shared/RequestStoryDialog.tsx))
-- **Read indicator:** [PartReadIndicator](../components/shared/PartReadIndicator.tsx) — ✓ / partial / outline circle from variant-scoped localStorage progress; updates live via `qissa:progress-changed` event
+- **Shows:** cover (heroUrl), source title (titlecased), author, Start Reading button (routes to the primary variant's part 1), **"Available in" grid** with one card per published variant + a trailing **Source card** linking to `/s/<id>/source/p/1`, Bookmark + Share, **"Request another translation" CTA** ([RequestStoryDialog](../components/shared/RequestStoryDialog.tsx))
+- **No standalone Parts list:** readers enter via the variant or source cards; per-variant progress is tracked in localStorage and surfaced on home's Continue Reading
+- **Doc:** [UI/public.md](./UI/public.md)
+
+### Source reader
+- **URL:** `/s/[storyId]/source/p/[partNumber]`
+- **Page:** [app/(public)/s/[storyId]/source/p/[partNumber]/page.tsx](../app/(public)/s/[storyId]/source/p/[partNumber]/page.tsx)
+- **What:** original `story_parts.text_original` rendered through [ReaderShell](../components/reader/ReaderShell.tsx), passed as `textTranslated` with `textOriginal` empty — single-column prose, "Show original" toggle auto-disabled (no parallel text)
+- **Progress isolation:** `variantSlug = "source"` so progress lives at `qissa:progress:<storyId>:source:<n>`, separate from translation progress
 - **Doc:** [UI/public.md](./UI/public.md)
 
 ### Reader experience (the showpiece)
