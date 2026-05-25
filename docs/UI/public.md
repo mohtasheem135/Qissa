@@ -19,6 +19,14 @@ Shared query shape lives in [lib/reader/story-cards.ts](../../lib/reader/story-c
 
 ---
 
+## `/browse` — All categories
+
+**File:** [app/(public)/browse/page.tsx](../../app/(public)/browse/page.tsx) (`revalidate = 60`)
+
+A flat grid of every active category that has at least one published story, rendered with [CategoryTile](../../components/shared/CategoryTile.tsx). Mirrors the home page's "Browse by category" query so counts match. The mobile bottom-nav Browse tab links here; the matcher in [PublicShell](../../components/shared/PublicShell.tsx) keeps the icon highlighted on `/browse` itself and on any `/c/*` page.
+
+---
+
 ## `/c/[categorySlug]` — Category landing
 
 **File:** [app/(public)/c/[categorySlug]/page.tsx](../../app/(public)/c/[categorySlug]/page.tsx) (`revalidate = 60`)
@@ -57,10 +65,25 @@ Sections:
 
 1. **Breadcrumb** ← Category / Subcategory
 2. **Cover image** (16:9 aspect) — composed via [heroUrl()](../../lib/imagekit/url.ts)
-3. **Title block** — language + tone badges; title rendered in the target language's reading font + `dir`; original title shown small if a translated one exists
-4. **Primary actions** — Start Reading (links to `/s/<id>/p/1`) · [BookmarkButton](../../components/shared/BookmarkButton.tsx) · [ShareButton](../../components/shared/ShareButton.tsx)
-5. **Parts list** — `<ol>` with per-part [PartReadIndicator](../../components/shared/PartReadIndicator.tsx). Indicator re-renders live as the user reads — driven by the `qissa:progress-changed` event ([lib/reader/progress.ts](../../lib/reader/progress.ts)).
-6. **Original source link** — optional, opens externally
+3. **Title block** — source title (run through [toTitleCase()](../../lib/utils/title-case.ts)), author, parts count
+4. **Primary actions** — Start Reading (links to `/s/<id>/<primaryVariantSlug>/p/1`) · [BookmarkButton](../../components/shared/BookmarkButton.tsx) · [ShareButton](../../components/shared/ShareButton.tsx)
+5. **Available in** — grid of cards, one per published variant + a trailing **Source card**. Variant cards link to `/s/<id>/<slug>/p/1` and show language + tone badges, the primary marker, and estimated reading minutes. The Source card carries a `Source` badge + author and links to `/s/<id>/source/p/1` so readers can open the original prose directly. A "Request another translation" CTA sits below the grid.
+6. **Original source link** — optional, opens externally if `source_url` is set
+
+(No standalone Parts list — readers enter via the cards. Progress is tracked per (story × variant), surfaced on the Continue Reading card on home.)
+
+---
+
+## `/s/[storyId]/source/p/[partNumber]` — Source reader
+
+**File:** [app/(public)/s/[storyId]/source/p/[partNumber]/page.tsx](../../app/(public)/s/[storyId]/source/p/[partNumber]/page.tsx) (`revalidate = 60`)
+
+The original story rendered through the same [ReaderShell](../../components/reader/ReaderShell.tsx) the variant reader uses. Two implementation notes:
+
+- Source text comes from `story_parts.text_original`; it's passed in `textTranslated` (with `textOriginal` empty) so ReaderBody renders one column of prose and the "Show original" toggle is auto-disabled — there's no parallel column to surface.
+- Variant slug is the literal `"source"`. Progress keys (`qissa:progress:<storyId>:source:<n>`) stay isolated from any translation's progress, so reading the source doesn't muddy the in-progress badges on translated variants.
+
+Layout matches the variant reader: theme-aware top/bottom chrome, prev/next part navigation, `revalidate = 60`. No variant picker (single-entry).
 
 ---
 

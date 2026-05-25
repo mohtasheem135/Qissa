@@ -1,8 +1,10 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
+import { NavProgress } from "./NavProgress";
 
 const NAV_ITEMS: ReadonlyArray<{
   href: string;
@@ -19,9 +21,8 @@ const NAV_ITEMS: ReadonlyArray<{
   {
     href: "/browse",
     label: "Browse",
-    // /browse doesn't exist as its own page in Phase 1 — we link to the
-    // category prefix instead. Match anything under /c.
-    match: (p) => p.startsWith("/c"),
+    // Highlight on /browse itself and on any category-tree path.
+    match: (p) => p === "/browse" || p.startsWith("/c"),
     icon: <BrowseIcon />,
   },
   {
@@ -49,12 +50,18 @@ const NAV_ITEMS: ReadonlyArray<{
  */
 export function PublicShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isReader = /^\/s\/[^/]+\/p\/\d+/.test(pathname);
+  // Matches both URL shapes:
+  //   /s/<id>/p/<n>                       (legacy redirect target)
+  //   /s/<id>/<variantSlug>/p/<n>         (current)
+  const isReader = /^\/s\/[^/]+(?:\/[^/]+)?\/p\/\d+/.test(pathname);
   if (isReader) {
     return <main className="flex-1">{children}</main>;
   }
   return (
     <>
+      <Suspense fallback={null}>
+        <NavProgress />
+      </Suspense>
       <TopBar />
       <main className="flex-1 pb-20 md:pb-0">{children}</main>
       <BottomNav />
@@ -105,11 +112,10 @@ function BottomNav() {
       <ul className="mx-auto grid max-w-md grid-cols-4">
         {NAV_ITEMS.map((item) => {
           const active = item.match(pathname);
-          const href = item.href === "/browse" ? "/" : item.href;
           return (
             <li key={item.label}>
               <Link
-                href={href}
+                href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex flex-col items-center gap-0.5 py-2.5 text-[10px]",

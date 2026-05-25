@@ -50,35 +50,36 @@ interface ReaderShellProps {
   variants: ReadonlyArray<VariantOption>;
 }
 
-const CHROME_HIDE_MS = 3000;
 const PROGRESS_SAVE_MS = 5000;
+const FONT_CONTROLS_HIDE_MS = 3000;
 
 /**
  * The reader's root client component. Owns:
  *   - theme / line-height / alignment / font-variant / show-original
  *     (persisted as one JSON blob in localStorage)
  *   - font size (separate localStorage key — A−/A+ buttons + pinch zoom)
- *   - chrome visibility (auto-hide after 3s, tap-to-show)
  *   - scroll progress save (every 5s + on visibilitychange)
  *   - scroll position restore on mount
  *
+ * Chrome is permanently visible (no auto-hide). `chromeVisible` is kept as
+ * a constant `true` for now so a future explicit toggle can be wired in
+ * without rewiring ReaderChrome / FontControls.
+ *
  * Pre-hydration we render with default settings to keep the SSR HTML
- * deterministic; the first useEffect tick swaps in the persisted values.
- * Body content is identical pre/post hydration so there's no mismatch.
+ * deterministic; a microtask after mount swaps in the persisted values.
+ * The save-effect is gated on `hydratedRef` so the default-state render
+ * does NOT round-trip and overwrite the user's saved preferences (the
+ * earlier bug — every fresh mount blew away theme/font/etc with defaults).
  */
 export function ReaderShell({ story, part, prevHref, nextHref, variants }: ReaderShellProps) {
   const [settings, setSettings] = useState<ReaderSettings>(DEFAULT_SETTINGS);
   const [fontSize, setFontSize] = useState<number>(DEFAULT_FONT_SIZE);
-  const [chromeVisible, setChromeVisible] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [fontControlsVisible, setFontControlsVisible] = useState(true);
+  const chromeVisible = true;
 
-  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Ref mirror so the auto-hide timer can read the current open state
-  // without re-registering listeners.
-  const settingsOpenRef = useRef(settingsOpen);
-  useEffect(() => {
-    settingsOpenRef.current = settingsOpen;
-  }, [settingsOpen]);
+  const hydratedRef = useRef(false);
+  const fontControlsHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // -- one-shot: hydrate state from localStorage and restore scroll ----------
   useEffect(() => {
@@ -91,6 +92,9 @@ export function ReaderShell({ story, part, prevHref, nextHref, variants }: Reade
       if (cancelled) return;
       setSettings(getReaderSettings());
       setFontSize(getFontSize());
+      // Mark hydrated AFTER the setStates above so the save-effect below
+      // skips the default-state render and only writes user-driven changes.
+      hydratedRef.current = true;
 
       const saved = getPartProgress(story.id, story.variantSlug, part.partNumber);
       if (saved && saved.scroll > 0.02) {
@@ -110,49 +114,52 @@ export function ReaderShell({ story, part, prevHref, nextHref, variants }: Reade
 
   // -- save reader settings whenever they change ----------------------------
   useEffect(() => {
-    // Skip first render: hydration writes the same value that's already in
-    // storage, no point round-tripping.
+    // Skip until hydration has loaded persisted values into state. Without
+    // this gate, the first commit (with DEFAULT_SETTINGS) would overwrite
+    // localStorage before the microtask reads from it.
+    if (!hydratedRef.current) return;
     saveReaderSettings(settings);
   }, [settings]);
+
+  // -- font controls auto-hide ----------------------------------------------
+  // Top + bottom chrome stay visible permanently (see chromeVisible above).
+  // Only the floating A−/A+ buttons fade out after 3s of idle — they're
+  // visual noise once the reader has picked a comfortable size.
+  const showFontControlsBriefly = useCallback(() => {
+    setFontControlsVisible(true);
+    if (fontControlsHideTimerRef.current) clearTimeout(fontControlsHideTimerRef.current);
+    fontControlsHideTimerRef.current = setTimeout(() => {
+      setFontControlsVisible(false);
+    }, FONT_CONTROLS_HIDE_MS);
+  }, []);
+
+  useEffect(() => {
+    // Initial hide timer (chrome starts visible via useState initial = true).
+    // Wrap in setTimeout so we never call setState synchronously in the
+    // effect body — the React-19 lint rule wants effects to subscribe, not
+    // dispatch state.
+    fontControlsHideTimerRef.current = setTimeout(() => {
+      setFontControlsVisible(false);
+    }, FONT_CONTROLS_HIDE_MS);
+
+    const events: Array<keyof DocumentEventMap> = ["scroll", "touchstart", "mousemove"];
+    for (const e of events) {
+      document.addEventListener(e, showFontControlsBriefly, { passive: true });
+    }
+    return () => {
+      for (const e of events) document.removeEventListener(e, showFontControlsBriefly);
+      if (fontControlsHideTimerRef.current) clearTimeout(fontControlsHideTimerRef.current);
+    };
+  }, [showFontControlsBriefly]);
 
   // -- font size persistence + clamping --------------------------------------
   const updateFontSize = useCallback((next: number) => {
     const clamped = clampFontSize(next);
     setFontSize(clamped);
     saveFontSize(clamped);
-  }, []);
-
-  // -- chrome auto-hide ------------------------------------------------------
-  // Stable callback (no dependencies) so the event listeners below don't
-  // re-register on every settings change. Reads the live settings-open
-  // flag via a ref instead of closing over the state.
-  const showChromeBriefly = useCallback(() => {
-    setChromeVisible(true);
-    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    hideTimerRef.current = setTimeout(() => {
-      // Don't hide while the settings sheet is open.
-      if (!settingsOpenRef.current) setChromeVisible(false);
-    }, CHROME_HIDE_MS);
-  }, []);
-
-  useEffect(() => {
-    // Chrome starts visible (useState initial = true). Start the hide timer
-    // inside setTimeout so we never call setState synchronously in the
-    // effect body — the React-19 lint rule wants effects to subscribe, not
-    // dispatch state.
-    hideTimerRef.current = setTimeout(() => {
-      if (!settingsOpenRef.current) setChromeVisible(false);
-    }, CHROME_HIDE_MS);
-
-    const events: Array<keyof DocumentEventMap> = ["scroll", "touchstart", "mousemove"];
-    for (const e of events) {
-      document.addEventListener(e, showChromeBriefly, { passive: true });
-    }
-    return () => {
-      for (const e of events) document.removeEventListener(e, showChromeBriefly);
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    };
-  }, [showChromeBriefly]);
+    // Tapping A− / A+ counts as interaction — keep them visible for another 3s.
+    showFontControlsBriefly();
+  }, [showFontControlsBriefly]);
 
   // -- save reading progress every 5s + on tab hide --------------------------
   useEffect(() => {
@@ -235,10 +242,7 @@ export function ReaderShell({ story, part, prevHref, nextHref, variants }: Reade
         totalParts={story.totalParts}
         prevHref={prevHref}
         nextHref={nextHref}
-        onOpenSettings={() => {
-          setSettingsOpen(true);
-          setChromeVisible(true);
-        }}
+        onOpenSettings={() => setSettingsOpen(true)}
         variants={variants}
         currentVariantSlug={story.variantSlug}
       />
@@ -257,14 +261,11 @@ export function ReaderShell({ story, part, prevHref, nextHref, variants }: Reade
         theme={settings.theme}
       />
 
-      <FontControls fontSize={fontSize} onChange={updateFontSize} visible={chromeVisible} />
+      <FontControls fontSize={fontSize} onChange={updateFontSize} visible={fontControlsVisible} />
 
       <ReaderSettingsSheet
         open={settingsOpen}
-        onOpenChange={(open) => {
-          setSettingsOpen(open);
-          if (!open) showChromeBriefly();
-        }}
+        onOpenChange={setSettingsOpen}
         settings={settings}
         onChange={setSettings}
         originalAvailable={part.textOriginal.length > 0}

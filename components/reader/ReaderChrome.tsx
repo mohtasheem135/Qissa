@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { useRouter } from "next/navigation";
 import { BookmarkButton } from "@/components/shared/BookmarkButton";
 import { ShareButton } from "@/components/shared/ShareButton";
@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { toTitleCase } from "@/lib/utils/title-case";
 
 export interface VariantOption {
   slug: string;
@@ -127,7 +128,7 @@ export function ReaderChrome({
           >
             <SettingsIcon />
           </button>
-          <ShareButton title={storyTitle} />
+          <ShareButton title={toTitleCase(storyTitle)} />
           <BookmarkButton storyId={storyId} className="h-9 w-9" />
         </div>
       </header>
@@ -187,8 +188,35 @@ function NavButton({
       prefetch
       className="inline-flex h-10 w-10 items-center justify-center rounded-md transition-colors hover:bg-black/5 dark:hover:bg-white/5"
     >
-      {icon}
+      <NavButtonIcon idle={icon} />
     </Link>
+  );
+}
+
+/**
+ * Inside a Link, useLinkStatus tells us when the navigation triggered by
+ * this specific link is pending. We swap the chevron for a spinner so
+ * tapping Next on a slow connection gives instant feedback (the global
+ * NavProgress is hidden inside the reader).
+ */
+function NavButtonIcon({ idle }: { idle: React.ReactNode }) {
+  const { pending } = useLinkStatus();
+  return (
+    <span
+      aria-busy={pending || undefined}
+      className="inline-flex h-5 w-5 items-center justify-center"
+    >
+      {pending ? <Spinner /> : idle}
+    </span>
+  );
+}
+
+function Spinner() {
+  return (
+    <span
+      aria-hidden
+      className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent opacity-70"
+    />
   );
 }
 
