@@ -53,7 +53,7 @@
 | Reader runtime | [lib/reader/](../lib/reader/) | Themes, settings, font size, progress, bookmarks, paragraph pairing |
 | Shared UI | [components/shared/](../components/shared/) | StoryCard, CategoryTile, SearchBar, BookmarkButton, PublicShell |
 | Reader UI | [components/reader/](../components/reader/) | ReaderShell, ReaderChrome, ReaderBody, ReaderSettings, FontControls, ProgressBar |
-| Admin UI | [components/admin/](../components/admin/) | Per-entity FormDialogs + Panels + StoryEditShell + PartCard |
+| Admin UI | [components/admin/](../components/admin/) | Per-entity FormDialogs + Panels + StoryEditShell + PartCard + [MobileAdminNav](../components/admin/MobileAdminNav.tsx) (hamburger drawer for `< md`) |
 | shadcn primitives | [components/ui/](../components/ui/) | button, card, dialog, input, label, select, switch, table, tabs, textarea, badge, alert-dialog, sonner |
 | DB | [supabase/migrations/](../supabase/migrations/) | Schema + RLS + seed in 3 timestamped migrations |
 | PWA | [public/sw.js](../public/sw.js), [app/manifest.ts](../app/manifest.ts), [public/icons/](../public/icons/) | Manual service worker + manifest + icons |
@@ -193,6 +193,8 @@ SW source: [public/sw.js](../public/sw.js). Registered by [components/shared/Ser
 | Legacy reader URL redirects to landing on no-variant, not 404 | [app/(public)/s/[storyId]/p/[partNumber]/page.tsx](../app/(public)/s/[storyId]/p/[partNumber]/page.tsx) | Old bookmarks always land somewhere useful; the landing page itself surfaces draft/no-translation state |
 | Manual `public/sw.js` over `@serwist/next` | [public/sw.js](../public/sw.js) | Avoids Next-16-compat uncertainty; trade-off documented: no build-asset precaching (Phase 1.5 can switch) |
 | SSE via `fetch().body.getReader()` not `EventSource` | [app/api/translate/queue/route.ts](../app/api/translate/queue/route.ts) | `EventSource` doesn't send custom auth headers; we need the admin session cookie |
+| Admin shell renders two layouts (sidebar on `md+`, hamburger drawer on `< md`) | [AdminShell](../components/admin/AdminShell.tsx) + [MobileAdminNav](../components/admin/MobileAdminNav.tsx) | Admin is used from phones too; a 240px persistent sidebar wastes ~60% of a 375px viewport. Drawer reuses [SidebarNav](../components/admin/SidebarNav.tsx) with an `onNavigate` callback so the link list stays in one place |
+| Stories + Requests panels render dual desktop-table / mobile-card views in one component | [StoriesPanel](../components/admin/StoriesPanel.tsx) + [RequestsPanel](../components/admin/RequestsPanel.tsx) | `table-fixed` 7-col layouts collapse to ~50px columns on a phone. Hidden below `md:` and replaced by stacked tap-target cards driven off the same filtered data — no separate route, no duplicated filter state |
 
 ---
 

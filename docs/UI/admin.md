@@ -8,11 +8,14 @@ Every CRUD page follows the same pattern: server component fetches data via the 
 
 ## Shell
 
-[AdminShell](../../components/admin/AdminShell.tsx) — sidebar on the left (logo · nav · email · sign-out form) + content max-w-7xl on the right (bumped from 5xl to give admin tables more horizontal breathing room). Sidebar uses [SidebarNav](../../components/admin/SidebarNav.tsx) Client Component for `usePathname` active-state highlighting.
+[AdminShell](../../components/admin/AdminShell.tsx) renders two layouts off the same content:
 
-**Scroll containment:** the shell is locked to viewport height (`h-dvh overflow-hidden`); only the `<main>` scrolls. The sidebar stays put when long admin tables (Stories, Requests) overflow vertically. This is the same pattern shadcn's `Sidebar` primitive uses internally — we don't pull the full primitive in because the admin is desktop-only and the nav is static (no mobile sheet / collapse-to-icon / context provider needed). If those features are wanted later, swap [AdminShell](../../components/admin/AdminShell.tsx) for shadcn's `Sidebar` + `SidebarInset`.
+- **Desktop (`md:` and up):** sidebar on the left (logo · nav · email · sign-out form) + `max-w-7xl` content on the right. Sidebar uses [SidebarNav](../../components/admin/SidebarNav.tsx) Client Component for `usePathname` active-state highlighting.
+- **Mobile (`< md`):** [MobileAdminNav](../../components/admin/MobileAdminNav.tsx) renders a `sticky top-0` top bar with a hamburger button; tapping it opens a slide-out drawer that reuses the same `SidebarNav` (with `onNavigate` to auto-close on link click) plus the email + sign-out form. The drawer closes on Escape, on backdrop tap, and on route changes (tracked via the React-19 "adjust state during render" pattern, not a `useEffect` — the `react-hooks/set-state-in-effect` rule forbids it). Body scroll is locked while the drawer is open.
 
-Sign out is a plain `<form action={signOut}>` ([app/admin/(protected)/actions.ts](../../app/admin/(protected)/actions.ts)) — works without client JS.
+**Scroll containment:** the shell is locked to viewport height (`h-dvh overflow-hidden`); only the `<main>` scrolls. The sidebar (desktop) and top bar (mobile) stay put when long admin tables (Stories, Requests) overflow vertically.
+
+Sign out is a plain `<form action={signOut}>` ([app/admin/(protected)/actions.ts](../../app/admin/(protected)/actions.ts)) — works without client JS, used identically in the desktop sidebar footer and the mobile drawer footer.
 
 ---
 
@@ -101,6 +104,8 @@ Filters:
 Table columns: cover thumb (via [coverUrl()](../../lib/imagekit/url.ts)) · title (rendered through [toTitleCase()](../../lib/utils/title-case.ts) so ALL-CAPS source titles display uniformly) · category → subcategory · **variants summary** (single "N variants" badge + `<published>/<total>` subline; hover surfaces the per-language / per-tone / ★-primary breakdown via native tooltip) · parts · status · **Publish/Unpublish only** — Delete is intentionally not in the row.
 
 The table uses `table-fixed` with percentage / fixed widths per column so no row can push horizontal overflow. Title and Subcategory cells truncate via the shared [Truncate](../../components/shared/Truncate.tsx) utility — single-line ellipsis, full text on hover via the native `title` attribute. The variants cell intentionally collapses to a count (not a list of badges) so a story with 5+ variants doesn't widen its row.
+
+**Mobile (`< md`):** the table is hidden and replaced by stacked `StoryMobileCard`s — each card shows the cover thumb, title, category → subcategory, status badge, variant count (with the same hover tooltip), parts count, and a Publish/Unpublish button. The card is a single tap-target that opens the edit page. Same component file, same data — just an alternate render below `md:`.
 
 **Pagination** is client-side over the already-loaded set (the page fetches up to 200 stories — Phase 1 cap). Default 20 rows / page, selector for 10/20/50, Prev/Next + "Page X of Y". Page snaps back to 1 on any filter or page-size change via the React-19 "adjust state during render" pattern (signature comparison — see [INTERNALS/server-actions.md](../INTERNALS/server-actions.md) for why we avoid `useEffect` for this kind of derived reset). Server-side pagination + URL-bound filters is the upgrade path if the 200-cap is ever raised.
 

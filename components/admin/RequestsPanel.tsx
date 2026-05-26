@@ -110,8 +110,8 @@ export function RequestsPanel({ requests }: RequestsPanelProps) {
         </div>
       </header>
 
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-end lg:flex lg:flex-wrap">
+        <div className="space-y-1 sm:col-span-2 lg:col-auto">
           <label htmlFor="req-search" className="text-muted-foreground text-xs">
             Search
           </label>
@@ -120,13 +120,13 @@ export function RequestsPanel({ requests }: RequestsPanelProps) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="title, language, email…"
-            className="w-64"
+            className="w-full lg:w-64"
           />
         </div>
         <div className="space-y-1">
           <label className="text-muted-foreground text-xs">Status</label>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-full lg:w-40">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -143,7 +143,7 @@ export function RequestsPanel({ requests }: RequestsPanelProps) {
         <div className="space-y-1">
           <label className="text-muted-foreground text-xs">Type</label>
           <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-full lg:w-40">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -155,7 +155,18 @@ export function RequestsPanel({ requests }: RequestsPanelProps) {
         </div>
       </div>
 
-      <div className="bg-background overflow-hidden rounded-md border">
+      {/* Mobile: stacked cards. Hidden on md+. */}
+      <div className="space-y-3 md:hidden">
+        {filtered.length === 0 ? (
+          <p className="text-muted-foreground bg-background rounded-md border py-10 text-center text-sm">
+            No requests match the current filters.
+          </p>
+        ) : (
+          filtered.map((row) => <RequestMobileCard key={row.id} row={row} />)
+        )}
+      </div>
+
+      <div className="bg-background hidden overflow-hidden rounded-md border md:block">
         <Table className="w-full table-fixed" containerClassName="overflow-x-hidden">
           <TableHeader>
             <TableRow>
@@ -360,5 +371,154 @@ function RequestTableRow({ row }: { row: RequestRow }) {
         </TableRow>
       ) : null}
     </>
+  );
+}
+
+/**
+ * Mobile-only card variant of a request row. Replaces the 7-column table
+ * below the `md:` breakpoint so triaging requests on a phone stays tappable.
+ */
+function RequestMobileCard({ row }: { row: RequestRow }) {
+  const [pending, startTransition] = useTransition();
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [notes, setNotes] = useState(row.admin_notes ?? "");
+
+  function handleStatus(next: RequestStatus) {
+    startTransition(async () => {
+      try {
+        await updateRequestStatus(row.id, next);
+        toast.success(`Marked ${next.replace("_", " ")}.`);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed.");
+      }
+    });
+  }
+
+  function handleSaveNotes() {
+    startTransition(async () => {
+      try {
+        await updateRequestAdminNote(row.id, notes);
+        toast.success("Notes saved.");
+        setNotesOpen(false);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed.");
+      }
+    });
+  }
+
+  function handleUnlink() {
+    startTransition(async () => {
+      try {
+        await linkFulfillingVariant(row.id, null);
+        toast.success("Variant unlinked.");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed.");
+      }
+    });
+  }
+
+  const rawLabel = row.type === "new_variant"
+    ? row.story_title_original ?? "(unknown story)"
+    : row.requested_title ?? "(no title)";
+  const requestLabel = toTitleCase(rawLabel);
+  const authorLabel = row.requested_author ? toTitleCase(row.requested_author) : null;
+
+  return (
+    <div className="bg-background space-y-3 rounded-md border p-3">
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <Badge variant="outline" className="shrink-0 text-[10px]">
+            {row.type === "new_variant" ? "variant" : "new story"}
+          </Badge>
+          <span className="font-medium break-words">{requestLabel}</span>
+        </div>
+        {authorLabel ? (
+          <p className="text-muted-foreground text-xs">by {authorLabel}</p>
+        ) : null}
+        <p className="text-muted-foreground text-xs">
+          {row.language_name_english ?? "—"}
+          {row.tone_name ? ` · ${row.tone_name}` : ""}
+          {" · "}
+          <span className="tabular-nums">{row.votes} vote{row.votes === 1 ? "" : "s"}</span>
+        </p>
+        <p className="text-muted-foreground text-xs">
+          {row.requester_email ? row.requester_email : <em>anon</em>}
+          {" · "}
+          <span className="tabular-nums" title={new Date(row.created_at).toISOString()}>
+            {formatDateTime(row.created_at)}
+          </span>
+        </p>
+        {row.story_id ? (
+          <Link
+            href={`/admin/stories/${row.story_id}`}
+            className="text-muted-foreground text-xs hover:underline"
+          >
+            → open story
+          </Link>
+        ) : null}
+        {row.admin_notes && !notesOpen ? (
+          <p className="text-muted-foreground text-xs italic break-words">
+            note: {row.admin_notes}
+          </p>
+        ) : null}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={row.status} onValueChange={(v) => handleStatus(v as RequestStatus)} disabled={pending}>
+          <SelectTrigger size="sm" className="w-32 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUSES.map((s) => (
+              <SelectItem key={s} value={s}>
+                {s.replace("_", " ")}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setNotesOpen((o) => !o)}
+          className="h-8 gap-1.5"
+        >
+          <FileTextIcon className="size-3.5" aria-hidden />
+          {notesOpen ? "Cancel" : "Notes"}
+          {!notesOpen && row.admin_notes ? (
+            <span aria-hidden className="bg-primary ml-0.5 inline-block size-1.5 rounded-full" />
+          ) : null}
+        </Button>
+        <DeleteConfirmDialog
+          title="Delete this request?"
+          description="Hard delete — the request and its votes are removed."
+          onConfirm={() => deleteRequest(row.id)}
+          successMessage="Request deleted."
+        />
+      </div>
+
+      {row.fulfilled_variant_label ? (
+        <p className="text-muted-foreground text-[11px]">
+          fulfilled by → {row.fulfilled_variant_label}
+          <button type="button" onClick={handleUnlink} className="ml-1 hover:underline">
+            unlink
+          </button>
+        </p>
+      ) : null}
+
+      {notesOpen ? (
+        <div className="flex flex-col gap-2">
+          <Textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={3}
+            className="text-xs"
+            placeholder="Triage notes — internal only."
+          />
+          <Button size="sm" onClick={handleSaveNotes} disabled={pending}>
+            Save notes
+          </Button>
+        </div>
+      ) : null}
+    </div>
   );
 }

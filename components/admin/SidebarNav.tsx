@@ -14,12 +14,18 @@ const NAV_ITEMS: Array<{ href: string; label: string }> = [
   { href: "/admin/ai-config", label: "AI config" },
 ];
 
+interface SidebarNavProps {
+  /** Optional callback fired on every nav link click — used by the mobile drawer to close. */
+  onNavigate?: () => void;
+}
+
 /**
  * Client component so we can highlight the active link via usePathname.
- * Pages reached by these links are built in Phase 5 — for now they 404,
- * which is fine for testing the auth + shell.
+ * Reused inside both the desktop sidebar (AdminShell) and the mobile drawer
+ * (MobileAdminNav). `onNavigate` lets the drawer close itself when the user
+ * picks a destination.
  */
-export function SidebarNav() {
+export function SidebarNav({ onNavigate }: SidebarNavProps = {}) {
   const pathname = usePathname();
 
   return (
@@ -32,6 +38,7 @@ export function SidebarNav() {
           <Link
             key={item.href}
             href={item.href}
+            onClick={onNavigate}
             aria-current={isActive ? "page" : undefined}
             className={cn(
               "rounded-md px-3 py-2 text-sm transition-colors",

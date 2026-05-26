@@ -116,7 +116,7 @@ export function CategoryFormDialog({ open, onOpenChange, initialValue }: Categor
             <p className="text-muted-foreground text-xs">Lowercase, digits, hyphens.</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="cat-icon">Icon (emoji)</Label>
               <Input

@@ -144,7 +144,7 @@ export function PartCard({
           <div className="text-muted-foreground text-xs">
             Original ({part.word_count_original} words)
           </div>
-          <div className="bg-muted/20 max-h-72 overflow-y-auto rounded-md border p-3 font-mono text-xs whitespace-pre-wrap">
+          <div className="bg-muted/20 max-h-48 overflow-y-auto rounded-md border p-3 font-mono text-xs whitespace-pre-wrap sm:max-h-72">
             {part.text_original || (
               <span className="text-muted-foreground italic">(empty)</span>
             )}
@@ -165,7 +165,7 @@ export function PartCard({
                 : "Click Translate or paste a manual translation."
             }
             disabled={effectiveStatus === "translating"}
-            className="h-72 max-h-96 min-h-48 resize-y overflow-y-auto font-mono text-xs"
+            className="h-48 max-h-96 min-h-40 resize-y overflow-y-auto font-mono text-xs sm:h-72 sm:min-h-48"
           />
         </div>
       </div>

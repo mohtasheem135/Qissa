@@ -67,7 +67,7 @@ export function ImageUploadField({ name, initialUrl = null }: ImageUploadFieldPr
   return (
     <div className="space-y-2">
       <Label>Cover image</Label>
-      <div className="flex items-start gap-4">
+      <div className="flex flex-col items-start gap-3 sm:flex-row sm:gap-4">
         <div className="bg-muted/40 flex h-24 w-32 shrink-0 items-center justify-center overflow-hidden rounded border">
           {previewSrc ? (
             <Image
@@ -82,7 +82,7 @@ export function ImageUploadField({ name, initialUrl = null }: ImageUploadFieldPr
             <span className="text-muted-foreground text-xs">No image</span>
           )}
         </div>
-        <div className="flex-1 space-y-2">
+        <div className="w-full flex-1 space-y-2">
           <input
             ref={fileInputRef}
             type="file"

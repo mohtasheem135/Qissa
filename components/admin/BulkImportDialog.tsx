@@ -64,7 +64,7 @@ export function BulkImportDialog({
           {triggerLabel}
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Bulk import parts</DialogTitle>
           <DialogDescription>
@@ -74,8 +74,8 @@ export function BulkImportDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-2">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
+            <div className="space-y-2 sm:w-32">
               <Label htmlFor="bulk-sep">Separator</Label>
               <Input
                 id="bulk-sep"
@@ -84,22 +84,20 @@ export function BulkImportDialog({
                 placeholder="---"
               />
             </div>
-            <div className="col-span-2 flex items-end">
-              <p className="text-muted-foreground text-xs">
-                Detected: <strong>{parts.length}</strong> part{parts.length === 1 ? "" : "s"}
-              </p>
-            </div>
+            <p className="text-muted-foreground text-xs sm:pb-2">
+              Detected: <strong>{parts.length}</strong> part{parts.length === 1 ? "" : "s"}
+            </p>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="bulk-text">Pasted text</Label>
             <Textarea
               id="bulk-text"
-              rows={12}
+              rows={8}
               value={text}
               onChange={(event) => setText(event.target.value)}
               placeholder={"Part 1 text here…\n\n---\n\nPart 2 text here…"}
-              className="font-mono text-xs"
+              className="font-mono text-xs sm:min-h-72"
             />
           </div>
 

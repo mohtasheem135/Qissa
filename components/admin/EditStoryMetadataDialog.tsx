@@ -123,7 +123,7 @@ export function EditStoryMetadataDialog({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="edit-author">Author (optional)</Label>
               <Input
@@ -143,7 +143,7 @@ export function EditStoryMetadataDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="edit-cat">Category</Label>
               <Select value={categoryId} onValueChange={setCategoryId}>

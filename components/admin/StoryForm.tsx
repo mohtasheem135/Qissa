@@ -175,7 +175,7 @@ export function StoryForm({
             <Input id="title" name="title_original" required autoFocus />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="author">Author (original, optional)</Label>
               <Input id="author" name="author_original" />
@@ -186,7 +186,7 @@ export function StoryForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="cat">Category</Label>
               <Select value={categoryId} onValueChange={setCategoryId}>
@@ -220,7 +220,7 @@ export function StoryForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="lang">Target language</Label>
               <Select value={targetLanguage} onValueChange={setTargetLanguage}>
@@ -277,7 +277,7 @@ export function StoryForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="provider">AI provider</Label>
               <Select value={providerId} onValueChange={handleProviderChange}>
@@ -331,7 +331,7 @@ export function StoryForm({
       </Card>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle>Parts</CardTitle>
             <CardDescription>
@@ -372,11 +372,11 @@ export function StoryForm({
               </div>
               <Textarea
                 name={`parts[${idx}].text`}
-                rows={6}
+                rows={4}
                 value={part.text}
                 onChange={(event) => updatePart(part.uid, { text: event.target.value })}
                 placeholder="Original-language text for this part. Paragraphs separated by blank lines are preserved."
-                className="font-mono text-xs"
+                className="font-mono text-xs sm:min-h-40"
               />
             </div>
           ))}
@@ -392,18 +392,20 @@ export function StoryForm({
           <CardTitle>Save</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-3">
-            <Label className="text-xs">Initial status:</Label>
-            <Select value={status} onValueChange={(v) => setStatus(v as "draft" | "published")}>
-              <SelectTrigger className="w-44">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="published">Published</SelectItem>
-              </SelectContent>
-            </Select>
-            <input type="hidden" name="status" value={status} />
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <div className="flex items-center gap-3">
+              <Label className="text-xs">Initial status:</Label>
+              <Select value={status} onValueChange={(v) => setStatus(v as "draft" | "published")}>
+                <SelectTrigger className="w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="published">Published</SelectItem>
+                </SelectContent>
+              </Select>
+              <input type="hidden" name="status" value={status} />
+            </div>
             <p className="text-muted-foreground text-xs">
               Drafts are not visible to readers. You can publish after translating.
             </p>

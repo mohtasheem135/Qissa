@@ -43,7 +43,7 @@ export function TonesPanel({ tones, languages }: TonesPanelProps) {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-end justify-between gap-3">
+      <header className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end lg:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Tones</h1>
           <p className="text-muted-foreground mt-1 text-sm">
@@ -51,13 +51,13 @@ export function TonesPanel({ tones, languages }: TonesPanelProps) {
             iterate on it to tune translations.
           </p>
         </div>
-        <div className="flex items-end gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="space-y-1">
             <label htmlFor="tone-filter" className="text-muted-foreground text-xs">
               Filter
             </label>
             <Select value={filter} onValueChange={setFilter}>
-              <SelectTrigger id="tone-filter" className="w-52">
+              <SelectTrigger id="tone-filter" className="w-full sm:w-52">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -70,12 +70,14 @@ export function TonesPanel({ tones, languages }: TonesPanelProps) {
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={() => setCreating(true)}>New tone</Button>
+          <Button onClick={() => setCreating(true)} className="w-full sm:w-auto">
+            New tone
+          </Button>
         </div>
       </header>
 
       <div className="bg-background rounded-md border">
-        <Table>
+        <Table className="min-w-[640px]">
           <TableHeader>
             <TableRow>
               <TableHead className="w-32">Language</TableHead>

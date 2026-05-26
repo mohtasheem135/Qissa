@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { SidebarNav } from "./SidebarNav";
+import { MobileAdminNav } from "./MobileAdminNav";
 import { signOut } from "@/app/admin/(protected)/actions";
 
 interface AdminShellProps {
@@ -10,18 +11,21 @@ interface AdminShellProps {
 }
 
 /**
- * Persistent two-pane chrome for every protected admin page.
- * - Left: brand + section nav.
- * - Right: page content (passed via children).
- * - Top-right of sidebar: who's signed in + sign-out form.
+ * Persistent chrome for every protected admin page.
+ * - **Desktop (md+):** left sidebar with brand + section nav + sign-out.
+ * - **Mobile (< md):** top bar with hamburger that opens a slide-out drawer
+ *   ([MobileAdminNav](./MobileAdminNav.tsx)). The drawer reuses [SidebarNav]
+ *   so nav items stay in one place.
  *
  * Sign-out uses a plain <form action={signOut}> so the flow works even
  * without client JS — no `'use client'` needed at this level.
  */
 export function AdminShell({ children, adminEmail }: AdminShellProps) {
   return (
-    <div className="bg-muted/20 flex h-dvh overflow-hidden">
-      <aside className="bg-background flex h-full w-60 shrink-0 flex-col overflow-y-auto border-r p-4">
+    <div className="bg-muted/20 flex h-dvh flex-col overflow-hidden md:flex-row">
+      <MobileAdminNav adminEmail={adminEmail} />
+
+      <aside className="bg-background hidden h-full w-60 shrink-0 flex-col overflow-y-auto border-r p-4 md:flex">
         <Link href="/admin" className="mb-6 block px-3 py-2">
           <span className="text-lg font-semibold tracking-tight">Qissa</span>
           <span className="text-muted-foreground ml-2 text-xs uppercase">admin</span>
@@ -46,7 +50,7 @@ export function AdminShell({ children, adminEmail }: AdminShellProps) {
       </aside>
 
       <main className="min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-7xl px-6 py-8">{children}</div>
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">{children}</div>
       </main>
     </div>
   );
