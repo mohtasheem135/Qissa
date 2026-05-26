@@ -18,7 +18,7 @@ export default async function StoriesPage() {
         `id, title_original, cover_image_url, status, total_parts, updated_at,
          subcategory:subcategories!inner ( name, category:categories!inner ( name ) ),
          variants:story_variants (
-           id, target_language, status,
+           id, target_language, status, is_primary,
            language:languages!inner ( name_english ),
            tone:tones!inner ( name )
          )`,
@@ -53,6 +53,7 @@ export default async function StoriesPage() {
         language_name_english: v.language?.name_english ?? v.target_language,
         tone_name: v.tone?.name ?? "—",
         status: (v.status === "published" ? "published" : "draft") as "draft" | "published",
+        is_primary: v.is_primary,
       })),
     };
   });

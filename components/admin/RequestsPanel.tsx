@@ -2,10 +2,14 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { FileTextIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Truncate } from "@/components/shared/Truncate";
+import { toTitleCase } from "@/lib/utils/title-case";
+import { formatDateTime } from "@/lib/utils/format-datetime";
 import {
   Select,
   SelectContent,
@@ -151,17 +155,17 @@ export function RequestsPanel({ requests }: RequestsPanelProps) {
         </div>
       </div>
 
-      <div className="bg-background rounded-md border">
-        <Table>
+      <div className="bg-background overflow-hidden rounded-md border">
+        <Table className="w-full table-fixed" containerClassName="overflow-x-hidden">
           <TableHeader>
             <TableRow>
-              <TableHead>Request</TableHead>
-              <TableHead>Language · Tone</TableHead>
-              <TableHead className="text-right">Votes</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="w-[24%]">Request</TableHead>
+              <TableHead className="w-[16%]">Language · Tone</TableHead>
+              <TableHead className="w-16 text-right">Votes</TableHead>
+              <TableHead className="w-32">Status</TableHead>
+              <TableHead className="w-[12%]">Email</TableHead>
+              <TableHead className="w-40">Created</TableHead>
+              <TableHead className="w-52 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -220,23 +224,25 @@ function RequestTableRow({ row }: { row: RequestRow }) {
     });
   }
 
-  const requestLabel = row.type === "new_variant"
+  const rawLabel = row.type === "new_variant"
     ? row.story_title_original ?? "(unknown story)"
     : row.requested_title ?? "(no title)";
+  const requestLabel = toTitleCase(rawLabel);
+  const authorLabel = row.requested_author ? toTitleCase(row.requested_author) : null;
 
   return (
     <>
       <TableRow>
-        <TableCell>
+        <TableCell className="min-w-0">
           <div className="space-y-0.5">
-            <div className="flex items-center gap-2 text-sm">
-              <Badge variant="outline" className="text-[10px]">
+            <div className="flex min-w-0 items-center gap-2 text-sm">
+              <Badge variant="outline" className="shrink-0 text-[10px]">
                 {row.type === "new_variant" ? "variant" : "new story"}
               </Badge>
-              <span className="font-medium">{requestLabel}</span>
+              <Truncate text={requestLabel} className="font-medium" />
             </div>
-            {row.requested_author ? (
-              <p className="text-muted-foreground text-xs">by {row.requested_author}</p>
+            {authorLabel ? (
+              <p className="text-muted-foreground text-xs">by {authorLabel}</p>
             ) : null}
             {row.story_id ? (
               <Link
@@ -247,13 +253,20 @@ function RequestTableRow({ row }: { row: RequestRow }) {
               </Link>
             ) : null}
             {row.admin_notes ? (
-              <p className="text-muted-foreground text-xs italic">note: {row.admin_notes}</p>
+              <Truncate
+                as="div"
+                text={`note: ${row.admin_notes}`}
+                className="text-muted-foreground text-xs italic"
+              />
             ) : null}
           </div>
         </TableCell>
-        <TableCell className="text-muted-foreground text-xs">
-          {row.language_name_english ?? "—"}
-          {row.tone_name ? ` · ${row.tone_name}` : ""}
+        <TableCell className="text-muted-foreground min-w-0 text-xs">
+          <Truncate
+            text={`${row.language_name_english ?? "—"}${
+              row.tone_name ? ` · ${row.tone_name}` : ""
+            }`}
+          />
         </TableCell>
         <TableCell className="text-right tabular-nums">{row.votes}</TableCell>
         <TableCell>
@@ -282,16 +295,42 @@ function RequestTableRow({ row }: { row: RequestRow }) {
             </p>
           ) : null}
         </TableCell>
-        <TableCell className="text-muted-foreground text-xs">
-          {row.requester_email ?? <em>anon</em>}
+        <TableCell className="text-muted-foreground min-w-0 text-xs">
+          {row.requester_email ? (
+            <Truncate text={row.requester_email} />
+          ) : (
+            <em>anon</em>
+          )}
         </TableCell>
-        <TableCell className="text-muted-foreground text-xs">
-          {new Date(row.created_at).toLocaleDateString()}
+        <TableCell
+          className="text-muted-foreground text-xs tabular-nums"
+          title={new Date(row.created_at).toISOString()}
+        >
+          {formatDateTime(row.created_at)}
         </TableCell>
         <TableCell className="text-right">
-          <div className="flex justify-end gap-1">
-            <Button variant="ghost" size="xs" onClick={() => setNotesOpen((o) => !o)}>
+          <div className="flex justify-end gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setNotesOpen((o) => !o)}
+              className="h-8 gap-1.5"
+              title={
+                notesOpen
+                  ? "Close notes editor"
+                  : row.admin_notes
+                    ? row.admin_notes
+                    : "No notes yet — click to add."
+              }
+            >
+              <FileTextIcon className="size-3.5" aria-hidden />
               {notesOpen ? "Cancel" : "Notes"}
+              {!notesOpen && row.admin_notes ? (
+                <span
+                  aria-hidden
+                  className="bg-primary ml-0.5 inline-block size-1.5 rounded-full"
+                />
+              ) : null}
             </Button>
             <DeleteConfirmDialog
               title="Delete this request?"

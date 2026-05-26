@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -22,12 +23,15 @@ interface DeleteConfirmDialogProps {
   triggerLabel?: string;
   onConfirm: () => Promise<{ error?: string | null } | void>;
   successMessage?: string;
+  /** Tooltip on the trigger. Defaults to the title. */
+  triggerTooltip?: string;
 }
 
 /**
- * Shared destructive-action confirmation. Renders a small "Delete" button
- * that opens an AlertDialog; on confirm, calls the provided server action
- * and surfaces success/error via sonner.
+ * Shared destructive-action confirmation. Renders an outline "Delete" button
+ * with a trash icon (matches the admin CTA convention) that opens an
+ * AlertDialog; on confirm, calls the provided server action and surfaces
+ * success/error via sonner.
  *
  * The action receiver is responsible for revalidatePath() so the table
  * re-renders without the row.
@@ -39,6 +43,7 @@ export function DeleteConfirmDialog({
   triggerLabel = "Delete",
   onConfirm,
   successMessage = "Deleted.",
+  triggerTooltip,
 }: DeleteConfirmDialogProps) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -58,7 +63,13 @@ export function DeleteConfirmDialog({
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-destructive hover:text-destructive hover:border-destructive/40 h-8 gap-1.5"
+          title={triggerTooltip ?? title}
+        >
+          <Trash2Icon className="size-3.5" aria-hidden />
           {triggerLabel}
         </Button>
       </AlertDialogTrigger>
