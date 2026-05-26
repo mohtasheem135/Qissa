@@ -234,7 +234,7 @@ export function VariantPanel({ variant, hasSiblings }: VariantPanelProps) {
 
   return (
     <Card>
-      <CardHeader className="flex flex-wrap items-start justify-between gap-3 space-y-0">
+      <CardHeader className="flex flex-col items-start gap-3 space-y-0 lg:flex-row lg:flex-wrap lg:justify-between">
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <CardTitle className="text-base">
@@ -262,7 +262,7 @@ export function VariantPanel({ variant, hasSiblings }: VariantPanelProps) {
               : ""}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:gap-3 lg:w-auto">
           {queueRunning ? (
             <Button variant="outline" size="sm" onClick={handleCancel}>
               Cancel

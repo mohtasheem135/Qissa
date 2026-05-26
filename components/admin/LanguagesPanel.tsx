@@ -26,7 +26,7 @@ export function LanguagesPanel({ languages }: LanguagesPanelProps) {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-end justify-between">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Languages</h1>
           <p className="text-muted-foreground mt-1 text-sm">
@@ -34,11 +34,13 @@ export function LanguagesPanel({ languages }: LanguagesPanelProps) {
             not deleted — soft delete is the only removal.
           </p>
         </div>
-        <Button onClick={() => setCreating(true)}>New language</Button>
+        <Button onClick={() => setCreating(true)} className="w-full sm:w-auto">
+          New language
+        </Button>
       </header>
 
       <div className="bg-background rounded-md border">
-        <Table>
+        <Table className="min-w-[720px]">
           <TableHeader>
             <TableRow>
               <TableHead className="w-16">Code</TableHead>

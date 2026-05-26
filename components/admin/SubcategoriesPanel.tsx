@@ -31,18 +31,20 @@ export function SubcategoriesPanel({ categoryId, subcategories }: SubcategoriesP
 
   return (
     <div className="space-y-4">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold">Subcategories</h2>
           <p className="text-muted-foreground mt-1 text-sm">
             Two-level navigation only — no nesting under subcategories.
           </p>
         </div>
-        <Button onClick={() => setCreating(true)}>New subcategory</Button>
+        <Button onClick={() => setCreating(true)} className="w-full sm:w-auto">
+          New subcategory
+        </Button>
       </div>
 
       <div className="bg-background rounded-md border">
-        <Table>
+        <Table className="min-w-[560px]">
           <TableHeader>
             <TableRow>
               <TableHead className="w-12">Icon</TableHead>

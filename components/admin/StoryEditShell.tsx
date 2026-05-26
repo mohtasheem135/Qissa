@@ -125,7 +125,7 @@ export function StoryEditShell({
           >
             ← Stories
           </Link>
-          <h1 className="truncate text-2xl font-semibold tracking-tight">
+          <h1 className="text-xl font-semibold tracking-tight break-words sm:text-2xl">
             {story.title_original}
           </h1>
           <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -144,7 +144,7 @@ export function StoryEditShell({
             </span>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:gap-3">
           <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
             Edit details
           </Button>
@@ -177,41 +177,45 @@ export function StoryEditShell({
         categories={categories}
       />
 
-      {/* Tabs: Source · each variant. "Add variant" sits next to the list. */}
+      {/* Tabs: Source · each variant. "Add variant" sits next to the list.
+          The tab strip scrolls horizontally on mobile so 5+ variants don't
+          wrap into two rows or push the "Add variant" button off-screen. */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <TabsList>
-            <TabsTrigger value={SOURCE_TAB}>
-              Source
-              <span className="text-muted-foreground ml-1.5 text-xs tabular-nums">
-                {story.parts.length}
-              </span>
-            </TabsTrigger>
-            {story.variants.map((v) => {
-              const translatedCount = v.parts.filter(
-                (p) => p.status === "completed" || p.status === "edited",
-              ).length;
-              return (
-                <TabsTrigger key={v.id} value={v.id}>
-                  <span className="font-medium">
-                    {v.language_name_english}
-                    <span className="text-muted-foreground"> · {v.tone_name}</span>
-                  </span>
-                  {v.is_primary ? (
-                    <span className="text-primary ml-1 text-[10px]" aria-label="primary">
-                      ★
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+          <div className="-mx-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <TabsList className="w-max">
+              <TabsTrigger value={SOURCE_TAB}>
+                Source
+                <span className="text-muted-foreground ml-1.5 text-xs tabular-nums">
+                  {story.parts.length}
+                </span>
+              </TabsTrigger>
+              {story.variants.map((v) => {
+                const translatedCount = v.parts.filter(
+                  (p) => p.status === "completed" || p.status === "edited",
+                ).length;
+                return (
+                  <TabsTrigger key={v.id} value={v.id}>
+                    <span className="font-medium">
+                      {v.language_name_english}
+                      <span className="text-muted-foreground"> · {v.tone_name}</span>
                     </span>
-                  ) : null}
-                  <Badge
-                    variant={v.status === "published" ? "default" : "outline"}
-                    className="ml-1 px-1 py-0 text-[10px]"
-                  >
-                    {translatedCount}/{v.parts.length}
-                  </Badge>
-                </TabsTrigger>
-              );
-            })}
-          </TabsList>
+                    {v.is_primary ? (
+                      <span className="text-primary ml-1 text-[10px]" aria-label="primary">
+                        ★
+                      </span>
+                    ) : null}
+                    <Badge
+                      variant={v.status === "published" ? "default" : "outline"}
+                      className="ml-1 px-1 py-0 text-[10px]"
+                    >
+                      {translatedCount}/{v.parts.length}
+                    </Badge>
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+          </div>
 
           <CreateVariantDialog
             storyId={story.id}

@@ -32,18 +32,20 @@ export function CategoriesPanel({ categories }: CategoriesPanelProps) {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-end justify-between">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Categories</h1>
           <p className="text-muted-foreground mt-1 text-sm">
             Top-level navigation. Click a row to manage its subcategories.
           </p>
         </div>
-        <Button onClick={() => setCreating(true)}>New category</Button>
+        <Button onClick={() => setCreating(true)} className="w-full sm:w-auto">
+          New category
+        </Button>
       </header>
 
       <div className="bg-background rounded-md border">
-        <Table>
+        <Table className="min-w-[640px]">
           <TableHeader>
             <TableRow>
               <TableHead className="w-12">Icon</TableHead>

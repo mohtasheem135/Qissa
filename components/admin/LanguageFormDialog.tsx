@@ -71,7 +71,7 @@ export function LanguageFormDialog({ open, onOpenChange, initialValue }: Props) 
         <form action={action} className="space-y-4">
           {isEdit ? <input type="hidden" name="original_code" value={initialValue.code} /> : null}
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="lang-code">Code</Label>
               <Input
@@ -96,7 +96,7 @@ export function LanguageFormDialog({ open, onOpenChange, initialValue }: Props) 
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="space-y-2 col-span-2">
               <Label htmlFor="lang-native">Native name</Label>
               <Input

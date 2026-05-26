@@ -142,7 +142,7 @@ export function CreateVariantDialog({
         <form action={action} className="space-y-4">
           <input type="hidden" name="story_id" value={storyId} />
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="cv-lang">Target language</Label>
               <Select value={targetLanguage} onValueChange={setTargetLanguage}>
@@ -188,7 +188,7 @@ export function CreateVariantDialog({
             <Input id="cv-title-tx" name="title_translated" placeholder="Auto-fillable later" />
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="cv-complexity">Complexity</Label>
               <Select value={complexity} onValueChange={setComplexity}>

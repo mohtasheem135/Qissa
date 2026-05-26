@@ -152,10 +152,10 @@ export function SourcePartRow({ part, isFirst, isLast }: SourcePartRowProps) {
           <Textarea
             value={textOriginal}
             onChange={(event) => setTextOriginal(event.target.value)}
-            className="h-64 max-h-96 min-h-32 resize-y overflow-y-auto font-mono text-xs"
+            className="h-44 max-h-96 min-h-32 resize-y overflow-y-auto font-mono text-xs sm:h-64"
           />
         ) : (
-          <div className="bg-muted/20 max-h-64 overflow-y-auto rounded-md border p-3 font-mono text-xs whitespace-pre-wrap">
+          <div className="bg-muted/20 max-h-44 overflow-y-auto rounded-md border p-3 font-mono text-xs whitespace-pre-wrap sm:max-h-64">
             {textOriginal || <span className="text-muted-foreground italic">(empty)</span>}
           </div>
         )}

@@ -108,7 +108,7 @@ export function ToneFormDialog({
         <form action={action} className="space-y-4">
           {isEdit ? <input type="hidden" name="id" value={initialValue.id} /> : null}
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="tone-lang">Language</Label>
               <Select
