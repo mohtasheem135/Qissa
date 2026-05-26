@@ -20,8 +20,8 @@ interface AdminShellProps {
  */
 export function AdminShell({ children, adminEmail }: AdminShellProps) {
   return (
-    <div className="bg-muted/20 flex min-h-dvh">
-      <aside className="bg-background flex w-60 shrink-0 flex-col border-r p-4">
+    <div className="bg-muted/20 flex h-dvh overflow-hidden">
+      <aside className="bg-background flex h-full w-60 shrink-0 flex-col overflow-y-auto border-r p-4">
         <Link href="/admin" className="mb-6 block px-3 py-2">
           <span className="text-lg font-semibold tracking-tight">Qissa</span>
           <span className="text-muted-foreground ml-2 text-xs uppercase">admin</span>
@@ -45,8 +45,8 @@ export function AdminShell({ children, adminEmail }: AdminShellProps) {
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1">
-        <div className="mx-auto max-w-5xl px-6 py-8">{children}</div>
+      <main className="min-w-0 flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-7xl px-6 py-8">{children}</div>
       </main>
     </div>
   );

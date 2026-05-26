@@ -160,7 +160,9 @@ Source of truth for **what** features should exist: [01-requirements.md](./01-re
 ### Story listing
 - **URL:** `/admin/stories`
 - **Page:** [app/admin/(protected)/stories/page.tsx](../app/admin/(protected)/stories/page.tsx)
-- **Panel:** [StoriesPanel](../components/admin/StoriesPanel.tsx) — cover thumb (composed via [coverUrl()](../lib/imagekit/url.ts)), title search, status + language filters, per-row publish toggle + soft-delete
+- **Panel:** [StoriesPanel](../components/admin/StoriesPanel.tsx) — `table-fixed` layout so no row can push horizontal overflow; cover thumb (composed via [coverUrl()](../lib/imagekit/url.ts)); title rendered through [toTitleCase()](../lib/utils/title-case.ts) and clipped via the shared [Truncate](../components/shared/Truncate.tsx) utility (single-line ellipsis, full text on hover); title/variant search; status + language filters; variants summary collapsed to a single "N variants" badge + `<pub>/<total>` subline (per-language tooltip on hover) so 5+ variants don't widen the row; per-row Publish/Unpublish only. Delete is intentionally not exposed in the row — it lives inside the story edit page behind [DeleteConfirmDialog](../components/admin/DeleteConfirmDialog.tsx)
+- **Pagination:** client-side over the loaded set (Phase 1 200-story cap). Default 20/page, selector for 10/20/50, Prev/Next + Page X of Y; auto-reset to page 1 on filter or page-size change via the React-19 adjust-state-during-render pattern.
+- **Sidebar scroll:** [AdminShell](../components/admin/AdminShell.tsx) is locked to `h-dvh`; only `<main>` scrolls so long tables don't drag the nav off-screen
 - **Doc:** [UI/admin.md](./UI/admin.md)
 
 ### New story
@@ -194,7 +196,7 @@ Source of truth for **what** features should exist: [01-requirements.md](./01-re
 ### Story requests — admin triage
 - **URL:** `/admin/requests`
 - **Page:** [app/admin/(protected)/requests/page.tsx](../app/admin/(protected)/requests/page.tsx)
-- **Panel:** [RequestsPanel](../components/admin/RequestsPanel.tsx) — filterable table, inline status dropdown, expandable notes editor, linked-variant pill, delete
+- **Panel:** [RequestsPanel](../components/admin/RequestsPanel.tsx) — `table-fixed` no-scroll layout (same convention as stories); titles/authors normalized via [toTitleCase()](../lib/utils/title-case.ts); long titles/notes/emails clipped via shared [Truncate](../components/shared/Truncate.tsx) (full value on hover); Created column shows date + time via shared [formatDateTime()](../lib/utils/format-datetime.ts) with the raw ISO on hover; Notes button shows a `•` indicator when a note exists and reveals the full note via the native `title` tooltip; inline status dropdown · expandable notes editor · linked-variant pill · delete
 - **Actions:** [updateRequestStatus / linkFulfillingVariant / updateRequestAdminNote / deleteRequest](../lib/actions/story-requests.ts)
 - **Sidebar entry:** [SidebarNav](../components/admin/SidebarNav.tsx) "Requests"
 - **Doc:** [04-database.md §4.12](./04-database.md#412-story_requests)

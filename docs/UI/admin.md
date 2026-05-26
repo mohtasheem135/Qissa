@@ -8,7 +8,9 @@ Every CRUD page follows the same pattern: server component fetches data via the 
 
 ## Shell
 
-[AdminShell](../../components/admin/AdminShell.tsx) — sidebar on the left (logo · nav · email · sign-out form) + content max-w-5xl on the right. Sidebar uses [SidebarNav](../../components/admin/SidebarNav.tsx) Client Component for `usePathname` active-state highlighting.
+[AdminShell](../../components/admin/AdminShell.tsx) — sidebar on the left (logo · nav · email · sign-out form) + content max-w-7xl on the right (bumped from 5xl to give admin tables more horizontal breathing room). Sidebar uses [SidebarNav](../../components/admin/SidebarNav.tsx) Client Component for `usePathname` active-state highlighting.
+
+**Scroll containment:** the shell is locked to viewport height (`h-dvh overflow-hidden`); only the `<main>` scrolls. The sidebar stays put when long admin tables (Stories, Requests) overflow vertically. This is the same pattern shadcn's `Sidebar` primitive uses internally — we don't pull the full primitive in because the admin is desktop-only and the nav is static (no mobile sheet / collapse-to-icon / context provider needed). If those features are wanted later, swap [AdminShell](../../components/admin/AdminShell.tsx) for shadcn's `Sidebar` + `SidebarInset`.
 
 Sign out is a plain `<form action={signOut}>` ([app/admin/(protected)/actions.ts](../../app/admin/(protected)/actions.ts)) — works without client JS.
 
@@ -92,13 +94,17 @@ Backed by the singleton `ai_config` row with pinned UUID `00000000-…001`.
 
 Filters:
 
-- Search by title (client-side `includes` over `title_original + title_translated`)
+- Search by title or variant language/tone (client-side `includes`)
 - Status (All / Draft / Published)
-- Target language
+- Has variant in (language filter)
 
-Table columns: cover thumb (via [coverUrl()](../../lib/imagekit/url.ts)) · title (translated, fallback to original) · category → subcategory · language badge · tone · parts (completed/total) · status badge · Publish toggle button + soft-delete.
+Table columns: cover thumb (via [coverUrl()](../../lib/imagekit/url.ts)) · title (rendered through [toTitleCase()](../../lib/utils/title-case.ts) so ALL-CAPS source titles display uniformly) · category → subcategory · **variants summary** (single "N variants" badge + `<published>/<total>` subline; hover surfaces the per-language / per-tone / ★-primary breakdown via native tooltip) · parts · status · **Publish/Unpublish only** — Delete is intentionally not in the row.
 
-`completed_parts` is computed client-side from the embedded `parts:story_parts(status)` join — for Phase 1 scale (≤200 stories × ≤20 parts) this is fine.
+The table uses `table-fixed` with percentage / fixed widths per column so no row can push horizontal overflow. Title and Subcategory cells truncate via the shared [Truncate](../../components/shared/Truncate.tsx) utility — single-line ellipsis, full text on hover via the native `title` attribute. The variants cell intentionally collapses to a count (not a list of badges) so a story with 5+ variants doesn't widen its row.
+
+**Pagination** is client-side over the already-loaded set (the page fetches up to 200 stories — Phase 1 cap). Default 20 rows / page, selector for 10/20/50, Prev/Next + "Page X of Y". Page snaps back to 1 on any filter or page-size change via the React-19 "adjust state during render" pattern (signature comparison — see [INTERNALS/server-actions.md](../INTERNALS/server-actions.md) for why we avoid `useEffect` for this kind of derived reset). Server-side pagination + URL-bound filters is the upgrade path if the 200-cap is ever raised.
+
+Destructive **Delete** lives only inside the story edit page ([StoryEditShell](../../components/admin/StoryEditShell.tsx)), gated by [DeleteConfirmDialog](../../components/admin/DeleteConfirmDialog.tsx) — guards against accidental row-level deletes from the list.
 
 ---
 
