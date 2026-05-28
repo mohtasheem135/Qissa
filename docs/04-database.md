@@ -102,6 +102,7 @@ Then run `npm run typecheck` to catch any references to renamed/dropped columns.
 | [`20260522120002_rls_policies.sql`](../supabase/migrations/20260522120002_rls_policies.sql) | Enable RLS on all tables + public read policies |
 | [`20260522120003_seed_initial_data.sql`](../supabase/migrations/20260522120003_seed_initial_data.sql) | 13 languages, 28 tones, `ai_config` singleton — idempotent |
 | [`20260524120000_variants_and_requests.sql`](../supabase/migrations/20260524120000_variants_and_requests.sql) | **Multi-variant translations** (`story_variants`, `story_part_translations`) + **reader requests** (`story_requests`, `story_request_votes`). Reshapes `stories` + `story_parts` to remove per-variant fields; backfills one primary variant per existing story before the column drops. See §4.10–§4.13. |
+| [`20260529120000_search_stories_rpc.sql`](../supabase/migrations/20260529120000_search_stories_rpc.sql) | **Public search across original title + author + per-variant translated title.** Adds pg_trgm GIN indexes on `stories.author_original` and `story_variants.title_translated`, and defines the `search_stories(q, max_results)` RPC ranked by best-of-three trigram similarity. See [UI/public.md → /search](./UI/public.md). |
 
 ---
 
@@ -233,7 +234,8 @@ The source story's metadata. **As of the 2026-05-24 variants migration, all per-
 **Indexes:**
 - `stories_published_idx (status, is_active, published_at desc)` — home page "Recently Published"
 - `stories_subcategory_idx (subcategory_id)` — subcategory listing
-- `stories_title_original_trgm` — pg_trgm GIN, powers search on original titles (per-variant translated-title search is deferred — see [search page](../app/(public)/search/page.tsx))
+- `stories_title_original_trgm` — pg_trgm GIN on `title_original`, powers search on the original title
+- `stories_author_original_trgm` — pg_trgm GIN on `author_original` (migration 0004), used by the `search_stories` RPC for author matching
 
 **FKs:** `subcategory_id` uses `ON DELETE RESTRICT` so you can't accidentally delete a subcategory that has stories pointing at it. Per-variant language/tone references live on `story_variants`.
 
@@ -353,7 +355,7 @@ One row per `(story, target_language, tone)` combination. Each variant is indepe
 
 **Unique:** `(story_id, target_language, tone_id)` and `(story_id, slug)`.
 
-**Indexes:** `story_variants_story_active_idx`, `story_variants_published_idx`, `story_variants_target_language_idx`, `story_variants_tone_idx`.
+**Indexes:** `story_variants_story_active_idx`, `story_variants_published_idx`, `story_variants_target_language_idx`, `story_variants_tone_idx`, `story_variants_title_translated_trgm` (pg_trgm GIN, migration 0004 — used by the `search_stories` RPC).
 
 **RLS:** Anon can SELECT rows where `status='published' AND is_active=true AND` the parent story is published+active.
 
