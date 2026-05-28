@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <!-- Maskable icons need a safe area: the content stays inside the inner 80% of the canvas
-       so OS-level masks (rounded squares, circles) don't crop the glyph. -->
-  <rect width="512" height="512" fill="#4F46E5"/>
-  <text x="256" y="332" font-family="Georgia, 'Source Serif Pro', serif" font-size="240" font-weight="600" fill="#ffffff" text-anchor="middle">Q</text>
-</svg>

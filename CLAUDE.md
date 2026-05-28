@@ -156,7 +156,6 @@ docs/
 
 Tracked at the bottom of [README.md](./README.md) and in the individual INTERNALS docs:
 
-- Real PNG icon variants (currently SVG only)
 - Glossary auto-extraction from translations
 - Per-paragraph alignment UI for "Show original"
 - Admin cost-tracking dashboard from `translation_jobs` rows

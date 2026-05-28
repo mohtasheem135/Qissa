@@ -12,7 +12,7 @@
 | [components/shared/ServiceWorkerRegistration.tsx](../../components/shared/ServiceWorkerRegistration.tsx) | Registers `sw.js` (production only) — mounted in root layout |
 | [components/shared/InstallPrompt.tsx](../../components/shared/InstallPrompt.tsx) | Gated install banner — mounted in root layout |
 | [app/manifest.ts](../../app/manifest.ts) | PWA manifest served at `/manifest.webmanifest` |
-| [app/icon.svg](../../app/icon.svg), [app/apple-icon.svg](../../app/apple-icon.svg), [public/icons/*](../../public/icons/) | Icons (SVG; PNG variants are Phase 1.5) |
+| [app/favicon.ico](../../app/favicon.ico), [app/icon0.svg](../../app/icon0.svg), [app/icon1.png](../../app/icon1.png), [app/apple-icon.png](../../app/apple-icon.png), [public/icons/*](../../public/icons/) | Icons — generated via realfavicongenerator.net |
 | [app/(public)/offline/page.tsx](../../app/(public)/offline/page.tsx) | Fallback page the SW serves when nav fails |
 
 ---
@@ -91,14 +91,13 @@ On "Install" click, calls `deferred.prompt()` and awaits `deferred.userChoice`. 
   short_name: "Qissa",
   start_url: "/",
   display: "standalone",
-  background_color: "#FFFFFF",
-  theme_color: "#4F46E5",
+  background_color: "#f5d399",
+  theme_color: "#f5d399",
   orientation: "portrait",
   categories: ["books", "education", "lifestyle"],
   icons: [
-    { src: "/icons/icon-192.svg", sizes: "192x192", type: "image/svg+xml", purpose: "any" },
-    { src: "/icons/icon-512.svg", sizes: "512x512", type: "image/svg+xml", purpose: "any" },
-    { src: "/icons/icon-maskable.svg", sizes: "512x512", type: "image/svg+xml", purpose: "maskable" },
+    { src: "/icons/web-app-manifest-192x192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+    { src: "/icons/web-app-manifest-512x512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
   ],
 }
 ```
@@ -111,13 +110,14 @@ On "Install" click, calls `deferred.prompt()` and awaits `deferred.userChoice`. 
 
 | File | Used as | Notes |
 |---|---|---|
-| [app/icon.svg](../../app/icon.svg) | Favicon (`<link rel="icon">` auto-injected by Next) | 32×32 |
-| [app/apple-icon.svg](../../app/apple-icon.svg) | `apple-touch-icon` (auto-injected) | 180×180, no rounded corners (iOS adds them) |
-| [public/icons/icon-192.svg](../../public/icons/icon-192.svg) | Manifest icon | 192×192 |
-| [public/icons/icon-512.svg](../../public/icons/icon-512.svg) | Manifest icon | 512×512 |
-| [public/icons/icon-maskable.svg](../../public/icons/icon-maskable.svg) | Maskable icon | Content sits in inner ~70% so OS masks don't crop the "Q" |
+| [app/favicon.ico](../../app/favicon.ico) | Legacy favicon (auto-injected by Next) | Multi-resolution ICO bundle |
+| [app/icon0.svg](../../app/icon0.svg) | Favicon (`<link rel="icon">` auto-injected by Next) | Vector with embedded raster — ~2.5 MB |
+| [app/icon1.png](../../app/icon1.png) | Raster favicon fallback (auto-injected, alongside icon0) | 96×96 |
+| [app/apple-icon.png](../../app/apple-icon.png) | `apple-touch-icon` (auto-injected) | 180×180, no rounded corners (iOS adds them) |
+| [public/icons/web-app-manifest-192x192.png](../../public/icons/web-app-manifest-192x192.png) | Manifest icon | 192×192, maskable |
+| [public/icons/web-app-manifest-512x512.png](../../public/icons/web-app-manifest-512x512.png) | Manifest icon | 512×512, maskable — source artwork pads the 80% safe zone so Android adaptive masks crop cleanly |
 
-All SVG — they scale and render crisp at any density. Phase 1.5 should add PNG variants via [realfavicongenerator.net](https://realfavicongenerator.net) for older Android launchers that prefer raster.
+Generated via [realfavicongenerator.net](https://realfavicongenerator.net) on 2026-05-28 from the brand artwork (book + calligraphic qaf, warm parchment `#f5d399`).
 
 ---
 
