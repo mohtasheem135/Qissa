@@ -1,15 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { StoryCard, type StoryCardData } from "@/components/shared/StoryCard";
 import { createClient } from "@/lib/supabase/client";
 import { getBookmarks, subscribeBookmarks } from "@/lib/reader/bookmarks";
+import { getVocab, subscribeVocab } from "@/lib/reader/vocab";
 
 export default function BookmarksPage() {
   // Both snapshots use getBookmarks — on the server it returns the same
   // frozen EMPTY singleton, satisfying useSyncExternalStore's "same
   // reference until data changes" contract.
   const bookmarkIds = useSyncExternalStore(subscribeBookmarks, getBookmarks, getBookmarks);
+  const vocab = useSyncExternalStore(subscribeVocab, getVocab, getVocab);
   const [stories, setStories] = useState<StoryCardData[] | null>(null);
 
   useEffect(() => {
@@ -74,12 +77,20 @@ export default function BookmarksPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-8">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Bookmarks</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Saved on this device. {bookmarkIds.length} bookmark
-          {bookmarkIds.length === 1 ? "" : "s"}.
-        </p>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Bookmarks</h1>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Saved on this device. {bookmarkIds.length} bookmark
+            {bookmarkIds.length === 1 ? "" : "s"}.
+          </p>
+        </div>
+        <Link
+          href="/my-words"
+          className="text-primary text-sm underline underline-offset-4"
+        >
+          My words ({vocab.length})
+        </Link>
       </header>
 
       {stories === null ? (

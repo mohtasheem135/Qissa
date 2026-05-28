@@ -100,6 +100,18 @@ Flow:
 
 State machine: while the fetch is in flight, `stories === null` → "Loading…"; afterwards, `[]` or the list.
 
+The page header surfaces a "My words (N)" link to [`/my-words`](#my-words--saved-vocab) so readers can find their saved dictionary lookups from the same "saved on this device" mental model.
+
+---
+
+## `/my-words` — Saved vocab
+
+**File:** [app/(public)/my-words/page.tsx](../../app/(public)/my-words/page.tsx) — pure Client Component.
+
+Lists every word the reader has saved from the [DefinitionPopover](../../components/reader/DefinitionPopover.tsx) — newest first. Each row shows the word, its language code, the date saved (via [formatDateTime()](../../lib/utils/format-datetime.ts)), a link back to the reader page that captured the word (when the popover stored context), a Wiktionary link, and a delete button.
+
+Subscribes to the vocab store via `useSyncExternalStore`, so a save / unsave anywhere (popover, other tab, this page's delete) updates the count + list live without a refresh. Storage details + the `VocabEntry` shape live in [INTERNALS/reader-state.md](../INTERNALS/reader-state.md).
+
 ---
 
 ## `/offline` — SW fallback

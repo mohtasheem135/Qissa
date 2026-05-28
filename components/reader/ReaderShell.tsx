@@ -40,6 +40,13 @@ export interface ReaderShellStory {
   fontFamilyReading: string | null;
   /** UI font stack (sans) — used when settings.fontVariant === "sans". */
   fontFamily: string | null;
+  /**
+   * ISO language code of the translated text. Passed into [ReaderBody] so
+   * tap-to-define resolves words with `Intl.Segmenter(targetLanguage)` and
+   * queries the dictionary API for that language. `null` (source reader)
+   * disables the tap-to-define interaction.
+   */
+  targetLanguage: string | null;
 }
 
 interface ReaderShellProps {
@@ -259,6 +266,9 @@ export function ReaderShell({ story, part, prevHref, nextHref, variants }: Reade
         fontSize={fontSize}
         settings={settings}
         theme={settings.theme}
+        targetLanguage={story.targetLanguage}
+        storyId={story.id}
+        variantSlug={story.variantSlug}
       />
 
       <FontControls fontSize={fontSize} onChange={updateFontSize} visible={fontControlsVisible} />

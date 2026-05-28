@@ -13,6 +13,7 @@
 | `qissa:progress:<storyId>:<partNumber>` | `{ scroll: 0..1, updatedAt: ISO }` | [ReaderShell](../../components/reader/ReaderShell.tsx) periodic save | [PartReadIndicator](../../components/shared/PartReadIndicator.tsx), [ReaderShell](../../components/reader/ReaderShell.tsx) restore |
 | `qissa:last-read` | `{ storyId, partNumber, updatedAt }` | `savePartProgress()` | [ContinueReading](../../components/shared/ContinueReading.tsx), [InstallPrompt](../../components/shared/InstallPrompt.tsx) (gate) |
 | `qissa:bookmarks` | string[] of story IDs | [bookmarks.ts](../../lib/reader/bookmarks.ts) | [BookmarkButton](../../components/shared/BookmarkButton.tsx), [BookmarksPage](../../app/(public)/bookmarks/page.tsx) |
+| `qissa:vocab` | `VocabEntry[]` (`{ word, languageCode, savedAt, storyId?, variantSlug?, partNumber? }`) | [vocab.ts](../../lib/reader/vocab.ts) — written by the [DefinitionPopover](../../components/reader/DefinitionPopover.tsx) save toggle | [DefinitionPopover](../../components/reader/DefinitionPopover.tsx) header (saved-state badge), [MyWordsPage](../../app/(public)/my-words/page.tsx), bookmark page header counter |
 | `qissa:installPromptDismissedAt` | epoch ms | [InstallPrompt](../../components/shared/InstallPrompt.tsx) | itself |
 
 ---
@@ -57,6 +58,21 @@ Two non-obvious things:
    - Same-tab `CustomEvent("qissa:bookmarks-changed")` dispatched by `writeBookmarks()`
 
    Two BookmarkButton instances in the same tab (story landing + reader top bar) stay synced via the CustomEvent; tabs sync via `storage`.
+
+### [lib/reader/vocab.ts](../../lib/reader/vocab.ts)
+
+Same shape as `bookmarks.ts` — cached snapshot for `useSyncExternalStore` + cross-tab sync via the `qissa:vocab-changed` CustomEvent + the native `storage` event:
+
+```ts
+function getVocab(): ReadonlyArray<VocabEntry>
+function isWordSaved(word, languageCode): boolean
+function saveWord(entry: Omit<VocabEntry, "savedAt">): void
+function removeWord(word, languageCode): void
+function toggleWord(entry: Omit<VocabEntry, "savedAt">): boolean
+function subscribeVocab(listener: () => void): () => void
+```
+
+`VocabEntry` carries `{ word, languageCode, savedAt, storyId?, variantSlug?, partNumber? }`. The optional context fields let [/my-words](../../app/(public)/my-words/page.tsx) deep-link back to the reader page where the word was tapped. Entries dedupe on `(languageCode, word)`.
 
 ### [lib/reader/progress.ts](../../lib/reader/progress.ts)
 

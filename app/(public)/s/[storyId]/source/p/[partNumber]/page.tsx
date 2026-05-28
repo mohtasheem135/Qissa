@@ -82,6 +82,10 @@ export default async function SourceReaderPage({ params }: PageProps) {
         direction: "ltr",
         fontFamily: null,
         fontFamilyReading: null,
+        // Source language varies story-by-story and isn't stored on the
+        // `stories` table — disable tap-to-define here. Tap-to-define lives
+        // on the translated variants where we have a known target_language.
+        targetLanguage: null,
       }}
       part={{
         id: part.id,

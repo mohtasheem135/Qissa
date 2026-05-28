@@ -51,6 +51,7 @@
 | Translation flow | [lib/translation/run-part.ts](../lib/translation/run-part.ts) | Shared per-part translate (used by single + queue endpoints) |
 | ImageKit | [lib/imagekit/](../lib/imagekit/) | Upload + URL composition (path-only storage) |
 | Analytics | [lib/analytics/](../lib/analytics/) | Server-only aggregations + pricing table for the `/admin/analytics` dashboard (`translation_jobs` + `story_part_versions`) |
+| Dictionary | [lib/dictionary/](../lib/dictionary/) | Server-only Wiktionary REST proxy + shared client types — powers tap-to-define popover in the reader via `/api/dictionary` |
 | Reader runtime | [lib/reader/](../lib/reader/) | Themes, settings, font size, progress, bookmarks, paragraph pairing |
 | Shared UI | [components/shared/](../components/shared/) | StoryCard, CategoryTile, SearchBar, BookmarkButton, PublicShell |
 | Reader UI | [components/reader/](../components/reader/) | ReaderShell, ReaderChrome, ReaderBody, ReaderSettings, FontControls, ProgressBar |
