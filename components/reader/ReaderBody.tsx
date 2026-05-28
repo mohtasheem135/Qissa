@@ -1,10 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { pairParagraphs } from "@/lib/reader/paragraphs";
 import { LINE_HEIGHT_VALUES, type ReaderSettings } from "@/lib/reader/reader-settings";
 import type { ReaderTheme } from "@/lib/reader/themes";
 import { DefinitionPopover, type DefinitionAnchor } from "./DefinitionPopover";
+import { HighlightHandle } from "./HighlightHandle";
+import { HighlightMenu, type HighlightTarget } from "./HighlightMenu";
+import {
+  getHighlights,
+  getHighlightForParagraph,
+  subscribeHighlights,
+  type Highlight,
+} from "@/lib/reader/highlights";
 
 interface ReaderBodyProps {
   partLabel: string;
@@ -73,6 +88,69 @@ export function ReaderBody({
 
   const [anchor, setAnchor] = useState<DefinitionAnchor | null>(null);
   const handleCloseAnchor = useCallback(() => setAnchor(null), []);
+
+  const [highlightTarget, setHighlightTarget] = useState<HighlightTarget | null>(null);
+  const handleCloseHighlightMenu = useCallback(() => setHighlightTarget(null), []);
+
+  // Per-paragraph highlight lookup, keyed by paragraph index. Subscribing to
+  // the whole vocab list (then filtering) is cheap — total highlights are
+  // bounded by what a single reader manually saves.
+  const allHighlights = useSyncExternalStore(
+    subscribeHighlights,
+    getHighlights,
+    getHighlights,
+  );
+  const paragraphHighlights = useMemo(() => {
+    const map = new Map<number, Highlight>();
+    for (const h of allHighlights) {
+      if (
+        h.storyId === storyId &&
+        h.variantSlug === variantSlug &&
+        h.partNumber === partNumber
+      ) {
+        map.set(h.paragraphIndex, h);
+      }
+    }
+    return map;
+  }, [allHighlights, storyId, variantSlug, partNumber]);
+
+  const handleOpenHighlightMenu = useCallback(
+    (paragraphIndex: number, rect: DOMRect) => {
+      // Defer the lookup to the click site rather than caching by index in
+      // case `paragraphs` re-renders between subscribe + click.
+      const existing =
+        getHighlightForParagraph(storyId, variantSlug, partNumber, paragraphIndex) ??
+        null;
+      const paragraphText = paragraphs[paragraphIndex]?.translated ?? "";
+      setHighlightTarget({
+        rect,
+        storyId,
+        variantSlug,
+        partNumber,
+        paragraphIndex,
+        paragraphText,
+        existing,
+      });
+    },
+    [storyId, variantSlug, partNumber, paragraphs],
+  );
+
+  // Scroll-into-view for deep links from /highlights — `#h-<paragraphIndex>`.
+  // Runs after paint so the article has laid out at its final font size.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = window.location.hash;
+    if (!raw.startsWith("#h-")) return;
+    const idx = Number.parseInt(raw.slice(3), 10);
+    if (!Number.isFinite(idx)) return;
+    const article = articleRef.current;
+    if (!article) return;
+    const target = article.querySelectorAll<HTMLElement>("[data-paragraph]")[idx];
+    if (!target) return;
+    requestAnimationFrame(() => {
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+  }, [partNumber]);
 
   // Focus mode: highlight the paragraph closest to the viewport centre.
   useEffect(() => {
@@ -185,38 +263,45 @@ export function ReaderBody({
         </header>
 
         <div className="space-y-5">
-          {paragraphs.map((p, idx) => (
-            <div
-              key={idx}
-              data-paragraph
-              className="reader-paragraph space-y-2 transition-opacity duration-200"
-            >
-              <p
-                className="reader-translated"
-                style={{ wordBreak: direction === "rtl" ? "normal" : "break-word" }}
+          {paragraphs.map((p, idx) => {
+            const highlight = paragraphHighlights.get(idx);
+            return (
+              <div
+                key={idx}
+                id={`h-${idx}`}
+                data-paragraph
+                data-highlight={highlight?.colour}
+                className="reader-paragraph relative space-y-2 transition-opacity duration-200"
               >
-                {p.translated}
-              </p>
-              {showOriginal && p.original ? (
+                <HighlightHandle paragraphIndex={idx} onOpen={handleOpenHighlightMenu} />
                 <p
-                  className="reader-original border-s-2 ps-3 text-[0.85em] italic"
-                  lang={p.original ? undefined : undefined}
-                  style={{
-                    color: "var(--reader-text-muted)",
-                    borderColor: "var(--reader-chrome-border)",
-                    fontFamily: originalFontFamily ?? "var(--font-serif)",
-                  }}
-                  dir="auto"
+                  className="reader-translated"
+                  style={{ wordBreak: direction === "rtl" ? "normal" : "break-word" }}
                 >
-                  {p.original}
+                  {p.translated}
                 </p>
-              ) : null}
-            </div>
-          ))}
+                {showOriginal && p.original ? (
+                  <p
+                    className="reader-original border-s-2 ps-3 text-[0.85em] italic"
+                    lang={p.original ? undefined : undefined}
+                    style={{
+                      color: "var(--reader-text-muted)",
+                      borderColor: "var(--reader-chrome-border)",
+                      fontFamily: originalFontFamily ?? "var(--font-serif)",
+                    }}
+                    dir="auto"
+                  >
+                    {p.original}
+                  </p>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       </article>
 
       <DefinitionPopover anchor={anchor} onClose={handleCloseAnchor} />
+      <HighlightMenu target={highlightTarget} onClose={handleCloseHighlightMenu} />
     </>
   );
 }

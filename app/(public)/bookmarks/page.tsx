@@ -6,6 +6,7 @@ import { StoryCard, type StoryCardData } from "@/components/shared/StoryCard";
 import { createClient } from "@/lib/supabase/client";
 import { getBookmarks, subscribeBookmarks } from "@/lib/reader/bookmarks";
 import { getVocab, subscribeVocab } from "@/lib/reader/vocab";
+import { getHighlights, subscribeHighlights } from "@/lib/reader/highlights";
 
 export default function BookmarksPage() {
   // Both snapshots use getBookmarks — on the server it returns the same
@@ -13,6 +14,11 @@ export default function BookmarksPage() {
   // reference until data changes" contract.
   const bookmarkIds = useSyncExternalStore(subscribeBookmarks, getBookmarks, getBookmarks);
   const vocab = useSyncExternalStore(subscribeVocab, getVocab, getVocab);
+  const highlights = useSyncExternalStore(
+    subscribeHighlights,
+    getHighlights,
+    getHighlights,
+  );
   const [stories, setStories] = useState<StoryCardData[] | null>(null);
 
   useEffect(() => {
@@ -85,12 +91,20 @@ export default function BookmarksPage() {
             {bookmarkIds.length === 1 ? "" : "s"}.
           </p>
         </div>
-        <Link
-          href="/my-words"
-          className="text-primary text-sm underline underline-offset-4"
-        >
-          My words ({vocab.length})
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/highlights"
+            className="text-primary text-sm underline underline-offset-4"
+          >
+            Highlights ({highlights.length})
+          </Link>
+          <Link
+            href="/my-words"
+            className="text-primary text-sm underline underline-offset-4"
+          >
+            My words ({vocab.length})
+          </Link>
+        </div>
       </header>
 
       {stories === null ? (

@@ -126,6 +126,23 @@ The popover handles its own fetch state machine (loading / loaded / empty / erro
 
 The save state in the popover header subscribes to the vocab store via `useSyncExternalStore` so saves in one tab flip the icon in another.
 
+### Per-paragraph highlights
+
+Every paragraph renders a small circular [HighlightHandle](../../components/reader/HighlightHandle.tsx) in the start margin (`inset-inline-start: -1.25rem` so it sits in the article's `px-5 sm:px-8` padding without overlapping the prose; the logical property flips automatically in RTL). Default opacity is 0.18 (invisible until hover or focus on desktop; faintly visible on mobile); a saved highlight pins the handle full-opacity in its colour so highlighted paragraphs are visible at a glance while scrolling.
+
+Tapping the handle calls `getBoundingClientRect()` and opens [HighlightMenu](../../components/reader/HighlightMenu.tsx) anchored to that rect. The menu:
+
+- Three colour swatches — yellow / green / blue. Tapping a swatch calls `saveHighlight()` immediately and updates `data-highlight="<colour>"` on the paragraph wrapper; CSS in [globals.css](../../app/globals.css) applies a translucent (rgba ~0.22) background to `.reader-translated` so the colour reads on all 5 themes including Night and Focus.
+- An optional note `<textarea>` — disabled until a colour is picked (a colourless highlight isn't a valid state). Persisted on blur via the same `saveHighlight()` call so every keystroke doesn't write localStorage.
+- A trash button (only visible for already-saved highlights) — calls `removeHighlight()` and closes the popover.
+- Dismisses on outside-click / Escape / scroll / resize.
+
+Handle clicks call `stopPropagation` so the article-level tap-to-define handler never fires on top of opening the menu.
+
+Deep linking: each paragraph wrapper gets `id="h-<paragraphIndex>"`. On mount, if `window.location.hash` matches `^#h-(\d+)$`, [ReaderBody](../../components/reader/ReaderBody.tsx) finds the matching `[data-paragraph]` and `scrollIntoView({ block: "center", behavior: "smooth" })` inside a `requestAnimationFrame` so the article has laid out at its final font size first. This powers the "Back to the paragraph" links on [/highlights](../../app/(public)/highlights/page.tsx).
+
+Source reader supported too — highlights have no language dependency.
+
 ---
 
 ## ReaderSettings (dialog)
