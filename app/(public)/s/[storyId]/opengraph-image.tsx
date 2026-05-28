@@ -62,7 +62,11 @@ export default async function Image({ params }: Props) {
 
   const title = toTitleCase(story.title_original);
   const author = story.author_original ?? null;
-  const cover = coverUrl(story.cover_image_url, "w-360,h-480,c-maintain_ratio");
+  // `c-at_max` fits the source inside the box while preserving its natural
+  // aspect — combined with `objectFit: contain` on the <img>, the whole
+  // cover renders without cropping regardless of upload aspect (portrait,
+  // square, landscape). Slightly larger than the slot for retina sharpness.
+  const cover = coverUrl(story.cover_image_url, "w-760,h-1020,c-at_max");
 
   // Primary first, then alphabetical, deduped, limited to four pills.
   const langSet = new Set<string>();
@@ -86,58 +90,43 @@ export default async function Image({ params }: Props) {
           width: "100%",
           height: "100%",
           display: "flex",
-          flexDirection: "column",
+          flexDirection: "row",
           background: "linear-gradient(135deg, #1a1410 0%, #2a1d12 50%, #3a2818 100%)",
           color: "#f5e6c8",
-          padding: "60px",
+          padding: "56px",
+          gap: 48,
           fontFamily: "system-ui, sans-serif",
         }}
       >
-        {/* Top label */}
+        {/* Cover column — full inner height, image fits inside via contain so
+            the whole upload renders regardless of source aspect (portrait,
+            square, landscape). */}
         <div
           style={{
             display: "flex",
-            fontSize: 22,
-            letterSpacing: 6,
-            color: "#d4a574",
-            textTransform: "uppercase",
-          }}
-        >
-          Story
-        </div>
-
-        {/* Main row */}
-        <div
-          style={{
-            display: "flex",
-            flex: 1,
-            marginTop: 36,
-            gap: 56,
-            alignItems: "flex-start",
+            width: 380,
+            height: "100%",
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
           {cover ? (
-            // The `<img>` from next/og fetches at build/request time; ImageKit
-            // serves the transform above so we don't push the full hero
-            // resolution through the renderer.
             <img
               src={cover}
               alt=""
-              width={360}
-              height={480}
               style={{
-                width: 360,
-                height: 480,
-                objectFit: "cover",
+                maxWidth: "100%",
+                maxHeight: "100%",
+                objectFit: "contain",
                 borderRadius: 12,
-                boxShadow: "0 24px 48px rgba(0,0,0,0.4)",
+                boxShadow: "0 24px 48px rgba(0,0,0,0.45)",
               }}
             />
           ) : (
             <div
               style={{
-                width: 360,
-                height: 480,
+                width: 380,
+                height: 500,
                 borderRadius: 12,
                 background:
                   "linear-gradient(160deg, rgba(212,165,116,0.18), rgba(212,165,116,0.05))",
@@ -152,20 +141,35 @@ export default async function Image({ params }: Props) {
               ﹆
             </div>
           )}
+        </div>
 
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              flex: 1,
-              justifyContent: "center",
-              gap: 24,
-              paddingTop: 16,
-            }}
-          >
+        {/* Text column — STORY label up top, title block centred, wordmark
+            pinned to the bottom-right so it never overlaps the cover. */}
+        <div
+          style={{
+            display: "flex",
+            flex: 1,
+            flexDirection: "column",
+            justifyContent: "space-between",
+          }}
+        >
+          <div style={{ display: "flex", flexDirection: "column" }}>
             <div
               style={{
                 display: "flex",
+                fontSize: 22,
+                letterSpacing: 6,
+                color: "#d4a574",
+                textTransform: "uppercase",
+              }}
+            >
+              Story
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                marginTop: 28,
                 fontSize: clampTitleSize(title),
                 lineHeight: 1.1,
                 fontWeight: 700,
@@ -180,6 +184,7 @@ export default async function Image({ params }: Props) {
               <div
                 style={{
                   display: "flex",
+                  marginTop: 20,
                   fontSize: 28,
                   color: "rgba(245,230,200,0.7)",
                 }}
@@ -194,7 +199,7 @@ export default async function Image({ params }: Props) {
                   display: "flex",
                   flexWrap: "wrap",
                   gap: 12,
-                  marginTop: 12,
+                  marginTop: 28,
                 }}
               >
                 {langsShown.map((name) => (
@@ -229,30 +234,29 @@ export default async function Image({ params }: Props) {
               </div>
             ) : null}
           </div>
-        </div>
 
-        {/* Footer wordmark */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            fontSize: 28,
-            color: "rgba(245,230,200,0.55)",
-          }}
-        >
-          <span style={{ display: "flex" }}>Stories, translated with soul.</span>
-          <span
+          <div
             style={{
               display: "flex",
-              fontSize: 40,
-              fontWeight: 700,
-              letterSpacing: 4,
-              color: "#d4a574",
+              justifyContent: "space-between",
+              alignItems: "flex-end",
+              fontSize: 22,
+              color: "rgba(245,230,200,0.55)",
             }}
           >
-            QISSA
-          </span>
+            <span style={{ display: "flex" }}>Stories, translated with soul.</span>
+            <span
+              style={{
+                display: "flex",
+                fontSize: 40,
+                fontWeight: 700,
+                letterSpacing: 4,
+                color: "#d4a574",
+              }}
+            >
+              QISSA
+            </span>
+          </div>
         </div>
       </div>
     ),
