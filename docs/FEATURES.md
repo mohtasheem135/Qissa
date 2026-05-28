@@ -244,6 +244,10 @@ See [INTERNALS/pwa-service-worker.md](./INTERNALS/pwa-service-worker.md).
 - **Robots:** [app/robots.ts](../app/robots.ts) — allow `/`, disallow `/admin` + `/api`
 - **Metadata:** root layout sets OpenGraph + Twitter + appleWebApp + `metadataBase` from `NEXT_PUBLIC_APP_URL`
 - **Per-page titles:** every page exports `generateMetadata` or `metadata`
+- **Open Graph / Twitter card images (1200×630):**
+  - **Per-story:** [app/(public)/s/[storyId]/opengraph-image.tsx](../app/(public)/s/[storyId]/opengraph-image.tsx) — composes cover (via ImageKit `w-360,h-480` transform) + title (auto-scaled by length) + author + up to 4 published-language pills + Qissa wordmark. Edge-runtime via `next/og` `ImageResponse`. Twitter card re-exports it from [twitter-image.tsx](../app/(public)/s/[storyId]/twitter-image.tsx).
+  - **Root brand mark:** [app/opengraph-image.tsx](../app/opengraph-image.tsx) + [twitter-image.tsx](../app/twitter-image.tsx) — covers `/`, `/c/*`, `/search`, anywhere without its own OG. Same 1200×630 layout as the per-story fallback.
+  - **Why:** generic OG meta from the root layout lifted every share to a text-only preview. The per-story image makes a share into the actual cover + title social platforms can render — major click-through lift on the same share button surface.
 
 ---
 

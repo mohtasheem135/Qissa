@@ -72,6 +72,8 @@ Sections:
 
 (No standalone Parts list — readers enter via the cards. Progress is tracked per (story × variant), surfaced on the Continue Reading card on home.)
 
+**Open Graph / Twitter card image (1200×630)** is auto-wired by the co-located [opengraph-image.tsx](../../app/(public)/s/[storyId]/opengraph-image.tsx) + [twitter-image.tsx](../../app/(public)/s/[storyId]/twitter-image.tsx) (which re-exports the OG image). The renderer queries published + active story + variants, then composes cover (ImageKit `w-360,h-480` transform) + title (auto-scaled to fit) + author + up to 4 language pills + Qissa wordmark via `next/og`'s `ImageResponse`. A stale or unpublished link falls back to a brand mark so a broken link still produces a clean preview. The root [app/opengraph-image.tsx](../../app/opengraph-image.tsx) covers every page without its own OG.
+
 ---
 
 ## `/s/[storyId]/source/p/[partNumber]` — Source reader
