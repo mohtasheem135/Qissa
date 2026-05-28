@@ -30,7 +30,9 @@ Source of truth for **what** features should exist: [01-requirements.md](./01-re
 ### Search
 - **URL:** `/search?q=…`
 - **Page:** [app/(public)/search/page.tsx](../app/(public)/search/page.tsx)
-- **Backed by:** Postgres ILIKE on `stories.title_original` (pg_trgm GIN index from [migration 0001](../supabase/migrations/20260522120001_initial.sql)); per-variant translated-title search is deferred to Phase 1.5 since it needs a join-aware OR or an RPC
+- **Backed by:** the `search_stories(q, max_results)` Postgres RPC ([migration 0004](../supabase/migrations/20260529120000_search_stories_rpc.sql)) — ORs ILIKE across `stories.title_original`, `stories.author_original`, and per-variant `story_variants.title_translated` (published variants only). Returns ranked story IDs by best-of-three `pg_trgm.similarity` score; the page then fetches the full STORY_CARD_COLUMNS for those IDs and reorders to preserve the RPC ranking
+- **Indexes:** pg_trgm GIN on `stories.title_original` ([migration 0001](../supabase/migrations/20260522120001_initial.sql)), plus `stories.author_original` and `story_variants.title_translated` (migration 0004)
+- **Wildcard safety:** `%`, `_`, and `\` in user input are escaped client-side before being concatenated into the RPC's ILIKE patterns
 - **Doc:** [UI/public.md](./UI/public.md)
 
 ### Bookmarks

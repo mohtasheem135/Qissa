@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { SearchBar } from "@/components/shared/SearchBar";
-import { StoryCard } from "@/components/shared/StoryCard";
+import { StoryCard, type StoryCardData } from "@/components/shared/StoryCard";
 import { createClient } from "@/lib/supabase/server";
 import { STORY_CARD_COLUMNS, toStoryCard } from "@/lib/reader/story-cards";
 
@@ -26,7 +26,9 @@ export default async function SearchPage({ searchParams }: PageProps) {
       </header>
 
       {query === "" ? (
-        <p className="text-muted-foreground text-sm">Type a title and press Enter.</p>
+        <p className="text-muted-foreground text-sm">
+          Type a title, author, or translated title and press Enter.
+        </p>
       ) : cards.length === 0 ? (
         <p className="text-muted-foreground text-sm">
           No published stories match &ldquo;{query}&rdquo;.
@@ -47,27 +49,50 @@ export default async function SearchPage({ searchParams }: PageProps) {
   );
 }
 
-async function runSearch(query: string) {
+const MAX_RESULTS = 60;
+
+/**
+ * Calls the `search_stories` RPC (defined in
+ * [migration 0004](../../supabase/migrations/20260529120000_search_stories_rpc.sql)),
+ * which returns ranked story IDs from a trigram-similarity search across
+ *   - `stories.title_original`
+ *   - `stories.author_original`
+ *   - `story_variants.title_translated` (published variants only)
+ *
+ * We then fetch the full STORY_CARD_COLUMNS for those IDs and re-order them
+ * locally to match the RPC ranking (`.in()` doesn't preserve input order).
+ * Wildcards (`%`, `_`) in user input are escaped before being concatenated
+ * into the RPC's ILIKE patterns.
+ */
+async function runSearch(query: string): Promise<StoryCardData[]> {
   if (!query) return [];
   const supabase = await createClient();
 
-  // Escape ILIKE wildcards in the user input so a literal '%' doesn't match
-  // everything. Then `.or()` against both title columns.
-  const safe = query.replace(/[%_]/g, "\\$&");
-  const pattern = `%${safe}%`;
+  // Escape ILIKE wildcards — literal `%` should match a percent sign, not
+  // every story in the catalogue.
+  const safe = query.replace(/[\\%_]/g, "\\$&");
 
-  // We search original-title only for now; cross-variant translated-title
-  // search needs a join-aware OR which Postgrest doesn't express cleanly.
-  // Phase 1.5 can swap this for a /rpc fts query that unions both columns.
-  const { data, error } = await supabase
+  const { data: matches, error: rpcError } = await supabase.rpc("search_stories", {
+    q: safe,
+    max_results: MAX_RESULTS,
+  });
+  if (rpcError) throw rpcError;
+
+  const ranked = matches ?? [];
+  if (ranked.length === 0) return [];
+
+  const ids = ranked.map((m) => m.story_id);
+
+  const { data: stories, error: storyError } = await supabase
     .from("stories")
     .select(STORY_CARD_COLUMNS)
-    .ilike("title_original", pattern)
-    .order("published_at", { ascending: false })
-    .limit(60);
+    .in("id", ids);
+  if (storyError) throw storyError;
 
-  if (error) throw error;
-  return (data ?? [])
+  // Restore the RPC's score ordering — `.in()` returns rows in DB order.
+  const orderMap = new Map(ids.map((id, idx) => [id, idx]));
+  return (stories ?? [])
     .map(toStoryCard)
-    .filter((s): s is NonNullable<typeof s> => s !== null);
+    .filter((s): s is NonNullable<typeof s> => s !== null)
+    .sort((a, b) => (orderMap.get(a.id) ?? MAX_RESULTS) - (orderMap.get(b.id) ?? MAX_RESULTS));
 }

@@ -51,9 +51,11 @@ A flat grid of every active category that has at least one published story, rend
 
 **File:** [app/(public)/search/page.tsx](../../app/(public)/search/page.tsx) (`dynamic = "force-dynamic"`)
 
-- ILIKE on `title_original` + `title_translated`, wildcards in the user input are escaped so `%` doesn't match-all
-- pg_trgm GIN indexes from [migration 0001](../../supabase/migrations/20260522120001_initial.sql) keep this fast
-- Empty `q` → prompt; no results → friendly message; otherwise the same grid
+- **Two-step query.** The page calls the `search_stories(q, max_results)` RPC ([migration 0004](../../supabase/migrations/20260529120000_search_stories_rpc.sql)), which ORs ILIKE across `stories.title_original`, `stories.author_original`, and `story_variants.title_translated` (published variants only) and returns ranked story IDs by best-of-three `pg_trgm.similarity` score. The page then fetches the full `STORY_CARD_COLUMNS` for those IDs and re-orders client-side to preserve the RPC ranking (`.in()` doesn't preserve input order).
+- **Why an RPC?** A Hindi reader typing "गोदान" should find the story even when only the variant's `title_translated` carries it. PostgREST's `.or()` doesn't express the join-aware OR cleanly, so the RPC encapsulates the union + score.
+- **Indexes.** pg_trgm GIN indexes on `stories.title_original` (migration 0001), plus `stories.author_original` and `story_variants.title_translated` (migration 0004) keep the ILIKEs fast.
+- **Wildcard safety.** `%`, `_`, and `\` in user input are escaped client-side before being concatenated into the RPC's ILIKE patterns so a literal `%` doesn't match-all.
+- **Empty `q`** → prompt; no results → friendly message; otherwise the same grid.
 
 ---
 
