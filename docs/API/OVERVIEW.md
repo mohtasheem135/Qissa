@@ -1,6 +1,6 @@
 # API Overview
 
-> Six HTTP endpoints. Everything else uses Server Actions or anon Supabase reads from server components.
+> Seven HTTP endpoints. Everything else uses Server Actions or anon Supabase reads from server components.
 
 All routes live under [app/api/](../../app/api/). The translate + upload + ai/test routes require `requireAdmin()` (see [UI/auth.md](../UI/auth.md)); the requests routes are **anonymous** (honeypot + IP rate-limit applied inside the handler).
 
@@ -12,6 +12,7 @@ All routes live under [app/api/](../../app/api/). The translate + upload + ai/te
 | `/api/ai/test` | POST | admin | Real round-trip to a provider with a known prompt | [ai-test.md](./ai-test.md) |
 | `/api/requests` | POST | **anon** | Submit a story / variant request (honeypot + rate-limited + dedupe→upvote) | [requests.md](./requests.md) |
 | `/api/requests/[id]/vote` | POST | **anon** | Upvote an existing request (per-IP dedupe) | [requests.md](./requests.md) |
+| `/api/dictionary` | GET | **anon** | Tap-to-define proxy to English Wiktionary REST API | [dictionary.md](./dictionary.md) |
 
 ---
 

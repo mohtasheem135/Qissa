@@ -111,6 +111,21 @@ When the theme isn't `focus`, the effect cleans up (removes the attribute, remov
 
 `<article dir={direction}>` flips inline-direction across the body. The `border-s-2 ps-3` on the original paragraph and the prev/next button positions in the bottom bar use **logical properties** so they automatically flip in RTL.
 
+### Tap-to-define dictionary popover
+
+When `targetLanguage` is set (variant reader — the source reader passes `null`), a click on body text opens [DefinitionPopover](../../components/reader/DefinitionPopover.tsx) anchored to the tapped word's bounding rect.
+
+Resolution flow inside [ReaderBody](../../components/reader/ReaderBody.tsx):
+
+1. `document.caretPositionFromPoint(x, y)` (or `caretRangeFromPoint` on older WebKit) → `{ node, offset }`.
+2. `Intl.Segmenter(targetLanguage, { granularity: 'word' })` walks the text node's value, picking the first `isWordLike` segment whose range contains `offset`. Handles Devanagari, Arabic, Tamil etc.; falls back to a Unicode-property regex when `Intl.Segmenter` is unavailable.
+3. A throw-away `Range` over `[start, end]` produces the popover's anchor `DOMRect`.
+4. We bail out if `window.getSelection()` is non-collapsed — long-press / drag-select must still surface the native copy menu.
+
+The popover handles its own fetch state machine (loading / loaded / empty / error), dismisses on outside-click / Escape / scroll / resize, and uses a 24-hour `Cache-Control` on the proxy response so popular words are cheap. Backing API: [/api/dictionary](../API/dictionary.md). Save toggle writes to [qissa:vocab](../INTERNALS/reader-state.md) — surfaced at `/my-words`.
+
+The save state in the popover header subscribes to the vocab store via `useSyncExternalStore` so saves in one tab flip the icon in another.
+
 ---
 
 ## ReaderSettings (dialog)

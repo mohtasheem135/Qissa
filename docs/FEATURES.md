@@ -72,6 +72,23 @@ Source of truth for **what** features should exist: [01-requirements.md](./01-re
 - **Show original:** [lib/reader/paragraphs.ts](../lib/reader/paragraphs.ts) zips original ↔ translated by paragraph
 - **Doc:** [UI/reader.md](./UI/reader.md)
 
+### Tap-to-define dictionary popover
+- **URL:** any variant reader page (`/s/[storyId]/[variantSlug]/p/[partNumber]`)
+- **Trigger:** single tap on a body paragraph word (with no active text selection — long-press / drag-select still surface the system copy menu)
+- **Resolver:** `Intl.Segmenter(targetLanguage, { granularity: 'word' })` in [ReaderBody](../components/reader/ReaderBody.tsx) — handles Devanagari, Arabic, Tamil etc.; falls back to a Unicode `\p{Letter}\p{Mark}\p{Number}` regex on older browsers
+- **Popover:** [DefinitionPopover](../components/reader/DefinitionPopover.tsx) — anchored to the word's bounding rect, flips above/below to fit the viewport, dismisses on outside click / Escape / scroll / resize
+- **Source:** [/api/dictionary](../app/api/dictionary/route.ts) proxies English Wiktionary's REST definition API; returns `primary` (target-language sections) + `others` (cross-language fallbacks) — see [API/dictionary.md](./API/dictionary.md)
+- **Save toggle:** stores `{ word, languageCode, savedAt, storyId, variantSlug, partNumber }` in `qissa:vocab` ([lib/reader/vocab.ts](../lib/reader/vocab.ts)) — surfaced at `/my-words`
+- **Source reader excluded:** the source reader passes `targetLanguage: null`, which disables the popover (we don't know the source language per story)
+- **Doc:** [UI/reader.md](./UI/reader.md) · [API/dictionary.md](./API/dictionary.md) · [INTERNALS/reader-state.md](./INTERNALS/reader-state.md)
+
+### My words (saved vocab)
+- **URL:** `/my-words`
+- **Page:** [app/(public)/my-words/page.tsx](../app/(public)/my-words/page.tsx)
+- **Storage:** [lib/reader/vocab.ts](../lib/reader/vocab.ts) — mirrors the bookmarks pattern (cached snapshot + cross-tab sync via `qissa:vocab-changed` + native `storage` event)
+- **UX:** newest-first list; each row links back to the reader page where the word was tapped (if context was captured) and to the Wiktionary entry; trash button removes
+- **Discoverable from:** the `/bookmarks` page header surfaces "My words (N)" link
+
 ### Share button
 - **Component:** [ShareButton](../components/shared/ShareButton.tsx)
 - **Used on:** story landing + reader top bar

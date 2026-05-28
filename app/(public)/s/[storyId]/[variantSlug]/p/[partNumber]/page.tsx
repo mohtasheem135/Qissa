@@ -116,6 +116,7 @@ export default async function ReaderPage({ params }: PageProps) {
           direction,
           fontFamily: variant.language?.font_family ?? null,
           fontFamilyReading: variant.language?.font_family_reading ?? null,
+          targetLanguage: variant.target_language,
         }}
         part={{
           id: translation.part.id,
