@@ -216,7 +216,6 @@ Click **Deploy**. Wait 2–3 minutes. Vercel gives you a URL like `https://qissa
 | 10 — PWA + SEO + deploy | ✅ |
 
 **Phase 1.5 polish** (post-MVP):
-- Real PNG icon variants via realfavicongenerator.net
 - Glossary auto-extraction from translations
 - Per-paragraph alignment UI in the reader
 - Admin cost-tracking dashboard from `translation_jobs`

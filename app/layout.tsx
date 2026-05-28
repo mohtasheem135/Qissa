@@ -54,7 +54,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   // Matches the manifest theme_color and the PWA address bar.
-  themeColor: "#4F46E5",
+  themeColor: "#f5d399",
   width: "device-width",
   initialScale: 1,
   // Allow pinch-zoom — the reader uses it to resize text.

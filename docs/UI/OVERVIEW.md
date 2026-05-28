@@ -40,7 +40,8 @@ POST /api/ai/test                ─ Test connection            app/api/ai/test/
 /manifest.webmanifest            ─ PWA manifest               app/manifest.ts
 /sitemap.xml                     ─ Sitemap                    app/sitemap.ts
 /robots.txt                      ─ Robots                     app/robots.ts
-/icon.svg, /apple-icon.svg       ─ Icons                      app/icon.svg, app/apple-icon.svg
+/favicon.ico, /icon0, /icon1,    ─ Icons                      app/favicon.ico, app/icon0.svg,
+/apple-icon                                                   app/icon1.png, app/apple-icon.png
 ```
 
 ---
@@ -96,6 +97,7 @@ Reader-agnostic shared components under [components/shared/](../../components/sh
 | [PartReadIndicator](../../components/shared/PartReadIndicator.tsx) | story landing parts list | ✓ / ⏳ / ○ per part |
 | [InstallPrompt](../../components/shared/InstallPrompt.tsx) | root layout | Gated PWA install banner |
 | [ServiceWorkerRegistration](../../components/shared/ServiceWorkerRegistration.tsx) | root layout | Registers `/sw.js` in prod |
+| [Loader / PageLoader](../../components/shared/Loader.tsx) | `app/(public)/loading.tsx` + any client pending state | dotLottie animation from [public/animations/qissa-loader.lottie](../../public/animations/qissa-loader.lottie) via `@lottiefiles/dotlottie-react`. Prefer skeletons (see `components/shared/skeletons.tsx`) for SSR streaming; use Loader only where no layout exists to scaffold |
 
 ---
 
