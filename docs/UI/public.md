@@ -104,7 +104,7 @@ Flow:
 
 State machine: while the fetch is in flight, `stories === null` → "Loading…"; afterwards, `[]` or the list.
 
-The page header surfaces a "My words (N)" link to [`/my-words`](#my-words--saved-vocab) so readers can find their saved dictionary lookups from the same "saved on this device" mental model.
+The page header surfaces "Highlights (N)" and "My words (N)" links alongside each other so readers can find any of their saved-on-this-device collections from the same surface.
 
 ---
 
@@ -115,6 +115,18 @@ The page header surfaces a "My words (N)" link to [`/my-words`](#my-words--saved
 Lists every word the reader has saved from the [DefinitionPopover](../../components/reader/DefinitionPopover.tsx) — newest first. Each row shows the word, its language code, the date saved (via [formatDateTime()](../../lib/utils/format-datetime.ts)), a link back to the reader page that captured the word (when the popover stored context), a Wiktionary link, and a delete button.
 
 Subscribes to the vocab store via `useSyncExternalStore`, so a save / unsave anywhere (popover, other tab, this page's delete) updates the count + list live without a refresh. Storage details + the `VocabEntry` shape live in [INTERNALS/reader-state.md](../INTERNALS/reader-state.md).
+
+---
+
+## `/highlights` — Highlights index
+
+**File:** [app/(public)/highlights/page.tsx](../../app/(public)/highlights/page.tsx) — pure Client Component.
+
+Lists every paragraph the reader has highlighted from the [HighlightMenu](../../components/reader/HighlightMenu.tsx) — newest first. Each row shows the colour-tinted snippet (captured at save time so paragraph re-flows don't invalidate the preview), the optional note, part number, save date, a "Back to the paragraph" deep link, and a trash button.
+
+The deep link is `/s/<storyId>/<variantSlug>/p/<partNumber>#h-<paragraphIndex>` — [ReaderBody](../../components/reader/ReaderBody.tsx) picks up that hash on mount and `scrollIntoView`-s the matching `[data-paragraph]` element inside `requestAnimationFrame` (so the article has laid out at its final font size first).
+
+Subscribes to the highlights store via `useSyncExternalStore`. Storage shape + the cross-tab sync pattern live in [INTERNALS/reader-state.md](../INTERNALS/reader-state.md).
 
 ---
 

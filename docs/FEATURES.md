@@ -91,6 +91,22 @@ Source of truth for **what** features should exist: [01-requirements.md](./01-re
 - **UX:** newest-first list; each row links back to the reader page where the word was tapped (if context was captured) and to the Wiktionary entry; trash button removes
 - **Discoverable from:** the `/bookmarks` page header surfaces "My words (N)" link
 
+### Per-paragraph highlights
+- **URL:** any reader page (variant + source)
+- **Trigger:** tap the small dot in the start margin of any paragraph ([HighlightHandle](../components/reader/HighlightHandle.tsx)) — opens the [HighlightMenu](../components/reader/HighlightMenu.tsx) anchored to the handle
+- **Colours:** yellow · green · blue. Tapping a swatch saves immediately; the popover stays open so the reader can add a note. Translucent backgrounds (`rgba(…, 0.22)`) read across all 5 themes including Night and Focus — see [globals.css](../app/globals.css)
+- **Note (optional):** plain text, persisted on blur. Pick a colour first; the textarea is disabled until then so a colourless highlight never lands
+- **Visual:** the highlighted paragraph's translated text gets the colour tint + a small inline-margin pill; the margin handle stays pinned in the saved colour so highlighted paragraphs are visible at a glance while scrolling
+- **Source reader supported:** unlike tap-to-define, highlights work in the source reader too (no language dependency)
+- **Storage:** [lib/reader/highlights.ts](../lib/reader/highlights.ts) — `qissa:highlights` array of `{ id, storyId, variantSlug, partNumber, paragraphIndex, colour, snippet, note?, createdAt }`. Cross-tab sync via the same pattern as bookmarks/vocab
+- **Doc:** [UI/reader.md](./UI/reader.md) · [INTERNALS/reader-state.md](./INTERNALS/reader-state.md)
+
+### Highlights index
+- **URL:** `/highlights`
+- **Page:** [app/(public)/highlights/page.tsx](../app/(public)/highlights/page.tsx) (pure Client Component)
+- **UX:** newest-first list of every saved highlight with the colour-tinted snippet, optional note, part number, save date, "Back to the paragraph" deep link, and trash button. Deep link goes to `/s/<id>/<slug>/p/<n>#h-<paragraphIndex>` — [ReaderBody](../components/reader/ReaderBody.tsx) picks up that hash on mount and `scrollIntoView`-s the matching `[data-paragraph]` to viewport centre
+- **Discoverable from:** the `/bookmarks` page header surfaces "Highlights (N)" link alongside "My words (N)"
+
 ### Share button
 - **Component:** [ShareButton](../components/shared/ShareButton.tsx)
 - **Used on:** story landing + reader top bar

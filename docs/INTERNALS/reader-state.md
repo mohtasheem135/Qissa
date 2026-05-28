@@ -14,6 +14,7 @@
 | `qissa:last-read` | `{ storyId, partNumber, updatedAt }` | `savePartProgress()` | [ContinueReading](../../components/shared/ContinueReading.tsx), [InstallPrompt](../../components/shared/InstallPrompt.tsx) (gate) |
 | `qissa:bookmarks` | string[] of story IDs | [bookmarks.ts](../../lib/reader/bookmarks.ts) | [BookmarkButton](../../components/shared/BookmarkButton.tsx), [BookmarksPage](../../app/(public)/bookmarks/page.tsx) |
 | `qissa:vocab` | `VocabEntry[]` (`{ word, languageCode, savedAt, storyId?, variantSlug?, partNumber? }`) | [vocab.ts](../../lib/reader/vocab.ts) — written by the [DefinitionPopover](../../components/reader/DefinitionPopover.tsx) save toggle | [DefinitionPopover](../../components/reader/DefinitionPopover.tsx) header (saved-state badge), [MyWordsPage](../../app/(public)/my-words/page.tsx), bookmark page header counter |
+| `qissa:highlights` | `Highlight[]` (`{ id, storyId, variantSlug, partNumber, paragraphIndex, colour, snippet, note?, createdAt }`) | [highlights.ts](../../lib/reader/highlights.ts) — written by the [HighlightMenu](../../components/reader/HighlightMenu.tsx) colour picker | [ReaderBody](../../components/reader/ReaderBody.tsx) (per-paragraph lookup + `data-highlight` attribute), [HighlightsPage](../../app/(public)/highlights/page.tsx), bookmark page header counter |
 | `qissa:installPromptDismissedAt` | epoch ms | [InstallPrompt](../../components/shared/InstallPrompt.tsx) | itself |
 
 ---
@@ -73,6 +74,21 @@ function subscribeVocab(listener: () => void): () => void
 ```
 
 `VocabEntry` carries `{ word, languageCode, savedAt, storyId?, variantSlug?, partNumber? }`. The optional context fields let [/my-words](../../app/(public)/my-words/page.tsx) deep-link back to the reader page where the word was tapped. Entries dedupe on `(languageCode, word)`.
+
+### [lib/reader/highlights.ts](../../lib/reader/highlights.ts)
+
+Same shape as `bookmarks.ts` + `vocab.ts` — cached snapshot for `useSyncExternalStore` + cross-tab sync via the `qissa:highlights-changed` CustomEvent + the native `storage` event:
+
+```ts
+function getHighlights(): ReadonlyArray<Highlight>
+function getHighlightsForPart(storyId, variantSlug, partNumber): ReadonlyArray<Highlight>
+function getHighlightForParagraph(storyId, variantSlug, partNumber, paragraphIndex): Highlight | undefined
+function saveHighlight(input: SaveHighlightInput): Highlight
+function removeHighlight(id: string): void
+function subscribeHighlights(listener: () => void): () => void
+```
+
+`Highlight` carries `{ id, storyId, variantSlug, partNumber, paragraphIndex, colour, snippet, note?, createdAt }`. Identity is the composite key `${storyId}:${variantSlug}:${partNumber}:${paragraphIndex}` — re-highlighting the same paragraph updates colour/note in place rather than appending. `snippet` is the first ~140 chars of the paragraph captured at first save so [/highlights](../../app/(public)/highlights/page.tsx) can show context without a follow-up DB query; `createdAt` survives colour/note edits so the index ordering stays stable.
 
 ### [lib/reader/progress.ts](../../lib/reader/progress.ts)
 
