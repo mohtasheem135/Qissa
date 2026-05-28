@@ -120,6 +120,16 @@ Source of truth for **what** features should exist: [01-requirements.md](./01-re
 - **Page:** [app/admin/(protected)/page.tsx](../app/admin/(protected)/page.tsx)
 - **Shows:** 3 stat cards (total / drafts / published) via PostgREST `count: 'exact', head: true`
 
+### Admin analytics
+- **URL:** `/admin/analytics` (URL-driven range: `?range=7d|30d|90d|all`, default `30d`)
+- **Page:** [app/admin/(protected)/analytics/page.tsx](../app/admin/(protected)/analytics/page.tsx)
+- **Queries:** [lib/analytics/translation-stats.ts](../lib/analytics/translation-stats.ts) (server-only) + [lib/analytics/translation-stats.types.ts](../lib/analytics/translation-stats.types.ts) (client-safe types)
+- **Pricing:** [lib/analytics/pricing.ts](../lib/analytics/pricing.ts) — editable per-1M-token table keyed by `<provider>:<model>`
+- **Sections:** KPIs (attempts · success rate · avg latency · est. cost) · daily activity sparkline · cost trend sparkline · provider/model breakdown (desktop table + mobile cards) · admin override rate per model (quality signal) · top errors with last-seen
+- **Data sources:** `translation_jobs` (per-attempt log: tokens, latency, provider, model, status, error) + `story_part_versions` (`created_by ∈ {ai, admin}` drives override rate)
+- **Charts:** inline SVG [Sparkline](../components/admin/AnalyticsCharts.tsx) + [ProgressBar](../components/admin/AnalyticsCharts.tsx) — no chart library dependency
+- **Doc:** [UI/admin.md](./UI/admin.md)
+
 ### Categories CRUD
 - **URLs:** `/admin/categories` · `/admin/categories/[id]`
 - **Pages:** [list](../app/admin/(protected)/categories/page.tsx) · [detail](../app/admin/(protected)/categories/[id]/page.tsx)

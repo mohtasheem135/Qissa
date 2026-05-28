@@ -27,6 +27,32 @@ Three stat cards: total active / drafts / published. Counts via `select("*", { c
 
 ---
 
+## `/admin/analytics` — Translation analytics
+
+**Files:**
+- Page: [app/admin/(protected)/analytics/page.tsx](../../app/admin/(protected)/analytics/page.tsx)
+- Queries (server-only): [lib/analytics/translation-stats.ts](../../lib/analytics/translation-stats.ts)
+- Shared types + range labels: [lib/analytics/translation-stats.types.ts](../../lib/analytics/translation-stats.types.ts)
+- Pricing constants: [lib/analytics/pricing.ts](../../lib/analytics/pricing.ts)
+- Range filter (client): [components/admin/AnalyticsRangeFilter.tsx](../../components/admin/AnalyticsRangeFilter.tsx)
+- Chart primitives: [components/admin/AnalyticsCharts.tsx](../../components/admin/AnalyticsCharts.tsx)
+
+Surfaces the cost / latency / reliability / quality data that's been logged in `translation_jobs` and `story_part_versions` since Phase 6 but never had a UI:
+
+- **KPIs** — total attempts, success rate, avg latency, estimated cost.
+- **Daily activity** sparkline (attempts/day) + **Cost trend** sparkline (USD/day). Inline SVG, no chart library.
+- **Provider / model breakdown** — per (provider, model): attempts · success rate (coloured progress bar) · avg latency · tokens in/out · est. cost. Desktop table + mobile-card pair (same dual-render convention as Stories / Requests).
+- **Admin override rate** per model — share of `story_part_versions` rows where `created_by='admin'`. Real quality signal: low = AI output is good as-is.
+- **Top errors** — grouped `translation_jobs.error_message`, sorted by count, last-seen timestamp via [formatDateTime()](../../lib/utils/format-datetime.ts).
+
+**Time range** is a URL param (`?range=7d|30d|90d|all`, default `30d`) so the page is shareable and deep-linkable. [AnalyticsRangeFilter](../../components/admin/AnalyticsRangeFilter.tsx) writes to the URL via `router.replace` inside a `useTransition` so the select stays responsive while the server re-aggregates.
+
+**Pricing** is an editable constant table in [lib/analytics/pricing.ts](../../lib/analytics/pricing.ts) keyed by `<provider>:<model>` — when a provider changes prices, edit that file. Unknown models fall back to zero cost; the page caption flags that the totals are *estimates*.
+
+**Aggregation strategy** — fetch jobs + versions in range (capped at 10,000 rows) and bucket in JS. Admin-only surface + small volumes, so simpler than a Postgres RPC. The KPI caption shows a "showing most recent 10,000 attempts" hint when the cap kicks in; if that happens regularly, swap to a SQL aggregation function.
+
+---
+
 ## `/admin/categories` — Categories
 
 **Files:**
