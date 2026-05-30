@@ -5,15 +5,17 @@
  *   - /admin/*, /api/*       network-only (skip)
  *   - navigation requests    network-first → cache → /offline
  *   - ImageKit / images      cache-first (long-lived)
+ *   - R2 / audio             cache-first (premium narration replays offline)
  *   - JS / CSS / fonts       stale-while-revalidate
  *
  * Bump CACHE_VERSION to invalidate all caches on the next activation.
  * The `activate` handler deletes caches that don't start with this prefix.
  */
 
-const CACHE_VERSION = "qissa-v1";
+const CACHE_VERSION = "qissa-v2";
 const HTML_CACHE = `${CACHE_VERSION}-html`;
 const IMAGE_CACHE = `${CACHE_VERSION}-images`;
+const AUDIO_CACHE = `${CACHE_VERSION}-audio`;
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const OFFLINE_URL = "/offline";
 
@@ -64,6 +66,16 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // 2b) R2 / audio → cache-first so premium narration replays offline.
+  if (
+    request.destination === "audio" ||
+    url.hostname.includes("r2.dev") ||
+    url.hostname.includes("r2.cloudflarestorage.com")
+  ) {
+    event.respondWith(handleAudio(request));
+    return;
+  }
+
   // 3) JS / CSS / fonts → stale-while-revalidate.
   if (
     request.destination === "script" ||
@@ -100,6 +112,24 @@ async function handleImage(request) {
     if (fresh.ok) {
       const cache = await caches.open(IMAGE_CACHE);
       cache.put(request, fresh.clone()).catch(() => {});
+    }
+    return fresh;
+  } catch {
+    return cached || Response.error();
+  }
+}
+
+async function handleAudio(request) {
+  const cache = await caches.open(AUDIO_CACHE);
+  // Match by URL so a ranged replay still resolves the cached full file.
+  const cached = await cache.match(request.url);
+  if (cached) return cached;
+  try {
+    // Fetch a full (non-range) copy so the file is replayable offline. Media
+    // elements accept a 200 full body even when they sent a Range request.
+    const fresh = await fetch(request.url);
+    if (fresh.ok) {
+      cache.put(request.url, fresh.clone()).catch(() => {});
     }
     return fresh;
   } catch {

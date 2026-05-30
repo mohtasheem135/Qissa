@@ -131,53 +131,28 @@
 }
 
 /* ---------------------------------------------------------------------------
- * Reader paragraph highlights.
- * Translucent backgrounds tinted onto the .reader-translated <p> so the
- * highlight follows the *translated* text only (Show-original keeps its
- * muted styling). Translucency keeps the colours legible on all 5 themes
- * — yellow on Night still reads as warm; blue on Sepia stays distinct.
- * Logical margin-inline pulls the background a smidge past the text bounds
- * (matched by padding-inline on the same axis) for a Kindle-style pill.
+ * Reader text highlights.
+ * Each highlight is a <mark.reader-highlight> wrapping the exact selected words
+ * inside .reader-translated. Translucent tints keep the colours legible on all
+ * 5 themes (yellow on Night still reads warm; blue on Sepia stays distinct) and
+ * `color: inherit` overrides the UA's default black-on-yellow <mark>. Tapping a
+ * mark opens the edit popover, so it shows a pointer + no native tap flash.
  * ------------------------------------------------------------------------- */
-.reader-paragraph[data-highlight] .reader-translated {
-  padding-block: 0.15em;
-  padding-inline: 0.4em;
-  margin-inline: -0.4em;
-  border-radius: 0.375rem;
+.reader-translated mark.reader-highlight {
+  color: inherit;
+  background-color: transparent;
+  border-radius: 0.2em;
+  padding-block: 0.02em;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
   transition: background-color 150ms ease-out;
 }
-.reader-paragraph[data-highlight="yellow"] .reader-translated {
-  background-color: rgba(245, 200, 50, 0.22);
+.reader-translated mark.reader-highlight[data-colour="yellow"] {
+  background-color: rgba(245, 200, 50, 0.38);
 }
-.reader-paragraph[data-highlight="green"] .reader-translated {
-  background-color: rgba(120, 200, 130, 0.2);
+.reader-translated mark.reader-highlight[data-colour="green"] {
+  background-color: rgba(120, 200, 130, 0.34);
 }
-.reader-paragraph[data-highlight="blue"] .reader-translated {
-  background-color: rgba(110, 165, 235, 0.22);
-}
-
-/* Highlight handle — a small circle in the start margin. Always present
- * but at low opacity until hover (desktop) or always faintly visible
- * (mobile). Saved highlights show the handle in their colour at full
- * opacity so the reader can see where they have highlights at a glance. */
-.reader-paragraph .highlight-handle {
-  opacity: 0.18;
-  transition: opacity 150ms ease-out, transform 150ms ease-out;
-}
-.reader-paragraph:hover .highlight-handle,
-.reader-paragraph .highlight-handle:focus-visible,
-.reader-paragraph[data-highlight] .highlight-handle {
-  opacity: 1;
-}
-.reader-paragraph .highlight-handle:hover {
-  transform: scale(1.1);
-}
-.reader-paragraph[data-highlight="yellow"] .highlight-handle {
-  background-color: rgb(225, 175, 40);
-}
-.reader-paragraph[data-highlight="green"] .highlight-handle {
-  background-color: rgb(95, 175, 110);
-}
-.reader-paragraph[data-highlight="blue"] .highlight-handle {
-  background-color: rgb(90, 145, 215);
+.reader-translated mark.reader-highlight[data-colour="blue"] {
+  background-color: rgba(110, 165, 235, 0.38);
 }

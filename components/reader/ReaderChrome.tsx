@@ -4,6 +4,7 @@ import Link, { useLinkStatus } from "next/link";
 import { useRouter } from "next/navigation";
 import { BookmarkButton } from "@/components/shared/BookmarkButton";
 import { ShareButton } from "@/components/shared/ShareButton";
+import { ListenButton } from "./ListenButton";
 import {
   Select,
   SelectContent,
@@ -33,6 +34,14 @@ interface ReaderChromeProps {
   /** All published variants of the story (incl. current). */
   variants: ReadonlyArray<VariantOption>;
   currentVariantSlug: string;
+  /** Pre-generated R2 MP3 for the current part, or null (Web Speech fallback). */
+  audioUrl: string | null;
+  /** Translated text of the current part — narrated by the Web Speech fallback. */
+  listenText: string;
+  /** ISO code of the translated text, for matching a Web Speech voice. */
+  targetLanguage: string | null;
+  /** Reader's chosen Web Speech voiceURI for this language, or null for auto. */
+  voiceURI: string | null;
 }
 
 /**
@@ -57,6 +66,10 @@ export function ReaderChrome({
   onOpenSettings,
   variants,
   currentVariantSlug,
+  audioUrl,
+  listenText,
+  targetLanguage,
+  voiceURI,
 }: ReaderChromeProps) {
   const router = useRouter();
   const fadeClass = visible
@@ -120,6 +133,13 @@ export function ReaderChrome({
               Part {partNumber} / {totalParts}
             </p>
           </div>
+          <ListenButton
+            audioUrl={audioUrl}
+            text={listenText}
+            targetLanguage={targetLanguage}
+            voiceURI={voiceURI}
+            nextHref={nextHref}
+          />
           <button
             type="button"
             onClick={onOpenSettings}

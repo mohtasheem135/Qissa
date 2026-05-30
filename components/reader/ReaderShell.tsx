@@ -27,6 +27,8 @@ export interface ReaderShellPart {
   partLabel: string;
   textOriginal: string;
   textTranslated: string;
+  /** Pre-generated R2 MP3 for this part, or null (Listen falls back to Web Speech). */
+  audioUrl: string | null;
 }
 
 export interface ReaderShellStory {
@@ -252,6 +254,14 @@ export function ReaderShell({ story, part, prevHref, nextHref, variants }: Reade
         onOpenSettings={() => setSettingsOpen(true)}
         variants={variants}
         currentVariantSlug={story.variantSlug}
+        audioUrl={part.audioUrl}
+        listenText={part.textTranslated}
+        targetLanguage={story.targetLanguage}
+        voiceURI={
+          story.targetLanguage
+            ? settings.narrationVoiceByLang[story.targetLanguage] ?? null
+            : null
+        }
       />
 
       <ReaderBody
@@ -279,6 +289,7 @@ export function ReaderShell({ story, part, prevHref, nextHref, variants }: Reade
         settings={settings}
         onChange={setSettings}
         originalAvailable={part.textOriginal.length > 0}
+        targetLanguage={story.targetLanguage}
       />
     </div>
   );

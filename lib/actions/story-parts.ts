@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/check-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
+import { runStoryPartNarration } from "@/lib/translation/run-narration";
 import { wordCount } from "@/lib/utils/word-count";
 import {
   syncAllVariantAggregatesForStory,
@@ -25,6 +26,12 @@ interface UpdatePartTextsInput {
    */
   translationId?: string;
   textTranslated?: string | null;
+  /**
+   * When supplied, edits the variant's narration script (emotion_text) — the
+   * expressive text the TTS engine narrates. No version snapshot (v1). Requires
+   * translationId.
+   */
+  emotionText?: string | null;
 }
 
 /**
@@ -116,7 +123,49 @@ export async function updatePartTexts(input: UpdatePartTextsInput): Promise<void
     }
   }
 
+  // 3) Narration-script edit on one specific variant's translation row. Writes
+  // emotion_text directly (no version history, no status change — the reader
+  // never sees this column; it only feeds the TTS pipeline).
+  if (typeof input.emotionText !== "undefined") {
+    if (!input.translationId) {
+      throw new Error("translationId is required when editing narration text.");
+    }
+    const next = input.emotionText ?? "";
+    const { data: trRow, error: emoErr } = await admin
+      .from("story_part_translations")
+      .update({ emotion_text: next.length > 0 ? next : null })
+      .eq("id", input.translationId)
+      .select("part:story_parts!inner(story_id)")
+      .single();
+    if (emoErr) throw new Error(emoErr.message);
+    storyId = storyId ?? trRow?.part?.story_id ?? null;
+  }
+
   if (storyId) revalidatePath(`/admin/stories/${storyId}`);
+}
+
+/**
+ * Generate (or regenerate) the expressive narration script for one translation
+ * row via the AI adapter (task:"narrate"). Writes emotion_text + emotion_status.
+ * Used by the "Generate narration script" button on PartCard. Never throws —
+ * surfaces the error string so the UI can toast it.
+ */
+export async function generateNarration(
+  translationId: string,
+): Promise<{ error: string | null }> {
+  await requireAdmin();
+  const admin = createAdminClient();
+
+  const result = await runStoryPartNarration(translationId);
+
+  const { data: tr } = await admin
+    .from("story_part_translations")
+    .select("part:story_parts!inner(story_id)")
+    .eq("id", translationId)
+    .single();
+  if (tr?.part?.story_id) revalidatePath(`/admin/stories/${tr.part.story_id}`);
+
+  return { error: result.ok ? null : result.error };
 }
 
 /**

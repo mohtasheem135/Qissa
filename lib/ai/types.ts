@@ -32,6 +32,15 @@ export interface TranslationInput {
   /** Optional — Gemini and most others auto-detect. */
   sourceLanguage?: string;
 
+  /**
+   * What the model is being asked to do with `text`:
+   *   - "translate" (default) — translate into the target language.
+   *   - "narrate" — rewrite the (already target-language) text into an
+   *     expressive narration script for text-to-speech. No translation.
+   * See lib/ai/prompt-builder.ts for how this switches the prompt.
+   */
+  task?: "translate" | "narrate";
+
   /** Target language ISO code, e.g. 'hi'. */
   targetLanguage: string;
   /** "Hindi" — used in the system prompt for clarity. */

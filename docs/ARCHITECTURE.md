@@ -49,7 +49,9 @@
 | Supabase clients | [lib/supabase/](../lib/supabase/) | Browser / server-with-cookies / service-role + env helpers |
 | AI provider adapter | [lib/ai/](../lib/ai/) | `TranslationProvider` interface + 5 implementations + prompt builder + retry |
 | Translation flow | [lib/translation/run-part.ts](../lib/translation/run-part.ts) | Shared per-part translate (used by single + queue endpoints) |
-| ImageKit | [lib/imagekit/](../lib/imagekit/) | Upload + URL composition (path-only storage) |
+| ImageKit | [lib/imagekit/](../lib/imagekit/) | Image upload + URL composition (path-only storage) |
+| TTS provider adapter | [lib/tts/](../lib/tts/) | `TtsProvider` interface + Sarvam/ElevenLabs + voice catalog + `runStoryPartAudio` (mirrors `lib/ai`) — see [tts-provider-adapter.md](./INTERNALS/tts-provider-adapter.md) |
+| R2 audio storage | [lib/r2/](../lib/r2/) | Cloudflare R2 audio upload + URL composition (path-only, S3 API) |
 | Analytics | [lib/analytics/](../lib/analytics/) | Server-only aggregations + pricing table for the `/admin/analytics` dashboard (`translation_jobs` + `story_part_versions`) |
 | Dictionary | [lib/dictionary/](../lib/dictionary/) | Server-only Wiktionary REST proxy + shared client types — powers tap-to-define popover in the reader via `/api/dictionary` |
 | Reader runtime | [lib/reader/](../lib/reader/) | Themes, settings, font size, progress, bookmarks, paragraph pairing |
@@ -145,6 +147,33 @@
 - **Failures** never throw out of the route. The translation row's status becomes `failed` with `error_message`; admin can retry from the UI.
 - **Variant-scoped:** the previous-part coherence anchor is fetched from the *same variant* — switching between variants doesn't leak context across them.
 
+### 5b. TTS pipeline (audio narration)
+
+A near-exact mirror of the translation pipeline. `/api/tts` (single) and
+`/api/tts/queue` (SSE) both delegate to [`runStoryPartAudio`](../lib/tts/run-part.ts),
+keyed by a `story_part_translations.id`:
+
+```
+[admin picks voice → Generate]
+   ▼
+/api/tts ─┐                    ┌─ /api/tts/queue (SSE)
+          └► lib/tts/run-part.ts ◄┘
+                 ▼
+        lib/tts/synthesize.ts (getTtsProvider + withRetry — reused from lib/ai)
+                 ▼
+        lib/tts/providers/<sarvam|elevenlabs>.ts
+                 ▼
+        lib/r2/upload.ts → Cloudflare R2 (audio/<variantId>/<part>-<voice>.<ext>)
+                 ▼
+        DB: story_part_audio.upsert (status, audio_path, …) + tts_jobs.insert
+```
+
+In the reader, the part page fetches the completed `story_part_audio` row; the
+[Listen control](./UI/reader.md) plays the stored MP3, or falls back to the
+**Web Speech API** ([reader-state.md](./INTERNALS/reader-state.md#web-speech-fallback))
+when there's no premium audio. Full detail:
+[tts-provider-adapter.md](./INTERNALS/tts-provider-adapter.md).
+
 ---
 
 ## 6. State persistence
@@ -190,6 +219,8 @@ SW source: [public/sw.js](../public/sw.js). Registered by [components/shared/Ser
 | React-19 "adjust state during render" pattern instead of `useEffect` for prop-to-state | Multiple FormDialogs, PartCard, StoryForm | `react-hooks/set-state-in-effect` lint rule; canonical replacement per React docs |
 | `useSyncExternalStore` snapshot caching | [lib/reader/bookmarks.ts](../lib/reader/bookmarks.ts) | Returning a fresh array each call triggers infinite loop; module-level cache keyed by raw localStorage string |
 | Cover URLs stored as **path only** | [lib/imagekit/upload.ts](../lib/imagekit/upload.ts) + [lib/imagekit/url.ts](../lib/imagekit/url.ts) | Decouples DB from ImageKit endpoint; switching CDNs requires no migration |
+| **Images on ImageKit, audio on Cloudflare R2** | [lib/imagekit/](../lib/imagekit/) + [lib/r2/](../lib/r2/) | Audio is egress-dominated; R2's zero-egress / 10 GB-free model fits where ImageKit's metered bandwidth does not. `story_part_audio.audio_path` is provider-agnostic (path-only) so R2→S3 is a config swap with no migration |
+| Web Speech **fallback** so Listen always works | [components/reader/ListenButton.tsx](../components/reader/ListenButton.tsx) + [lib/reader/speech.ts](../lib/reader/speech.ts) | Premium audio is opt-in per part; the device's free `speechSynthesis` covers everything else (no key, no storage) |
 | Single `runStoryPartTranslation` for both single + queue paths | [lib/translation/run-part.ts](../lib/translation/run-part.ts) | Retry policy + version trail + job logging can never drift |
 | Story edit page uses tabs (Source + one per variant) with `forceMount` on variant content | [components/admin/StoryEditShell.tsx](../components/admin/StoryEditShell.tsx) | Keeps each [VariantPanel](../components/admin/VariantPanel.tsx) mounted while inactive so an in-flight SSE translate queue isn't aborted when the admin clicks another tab |
 | Legacy reader URL redirects to landing on no-variant, not 404 | [app/(public)/s/[storyId]/p/[partNumber]/page.tsx](../app/(public)/s/[storyId]/p/[partNumber]/page.tsx) | Old bookmarks always land somewhere useful; the landing page itself surfaces draft/no-translation state |

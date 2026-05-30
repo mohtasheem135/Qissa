@@ -197,6 +197,30 @@ export async function updateVariant(input: UpdateVariantInput): Promise<void> {
   if (variant?.story_id) revalidatePath(`/admin/stories/${variant.story_id}`);
 }
 
+/**
+ * Persist a variant's TTS provider + model + voice choice (writes
+ * story_variants.tts_provider / tts_model / tts_voice_id). The admin picks
+ * these in VariantPanel's Audio section; runStoryPartAudio falls back to them
+ * when no per-call override is passed.
+ */
+export async function setVariantVoice(
+  id: string,
+  provider: string,
+  model: string,
+  voiceId: string,
+): Promise<void> {
+  await requireAdmin();
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("story_variants")
+    .update({ tts_provider: provider, tts_model: model, tts_voice_id: voiceId })
+    .eq("id", id)
+    .select("story_id")
+    .single();
+  if (error) throw new Error(error.message);
+  if (data?.story_id) revalidatePath(`/admin/stories/${data.story_id}`);
+}
+
 export async function setVariantPublished(id: string, published: boolean): Promise<void> {
   await requireAdmin();
   const admin = createAdminClient();

@@ -93,6 +93,7 @@ export default async function SourceReaderPage({ params }: PageProps) {
         partLabel: part.part_label ?? `Part ${part.part_number}`,
         textOriginal: "",
         textTranslated: sourceText,
+        audioUrl: null,
       }}
       prevHref={prevHref}
       nextHref={nextHref}

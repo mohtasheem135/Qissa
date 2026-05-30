@@ -27,12 +27,12 @@ Three stat cards: total active / drafts / published. Counts via `select("*", { c
 
 ---
 
-## `/admin/analytics` — Translation analytics
+## `/admin/analytics` — Translation + audio analytics
 
 **Files:**
 - Page: [app/admin/(protected)/analytics/page.tsx](../../app/admin/(protected)/analytics/page.tsx)
-- Queries (server-only): [lib/analytics/translation-stats.ts](../../lib/analytics/translation-stats.ts)
-- Shared types + range labels: [lib/analytics/translation-stats.types.ts](../../lib/analytics/translation-stats.types.ts)
+- Queries (server-only): [lib/analytics/translation-stats.ts](../../lib/analytics/translation-stats.ts) + [lib/analytics/audio-stats.ts](../../lib/analytics/audio-stats.ts)
+- Shared types + range labels: [lib/analytics/translation-stats.types.ts](../../lib/analytics/translation-stats.types.ts) (audio reuses its `RangeKey`/`parseRange`)
 - Pricing constants: [lib/analytics/pricing.ts](../../lib/analytics/pricing.ts)
 - Range filter (client): [components/admin/AnalyticsRangeFilter.tsx](../../components/admin/AnalyticsRangeFilter.tsx)
 - Chart primitives: [components/admin/AnalyticsCharts.tsx](../../components/admin/AnalyticsCharts.tsx)
@@ -48,6 +48,14 @@ Surfaces the cost / latency / reliability / quality data that's been logged in `
 **Time range** is a URL param (`?range=7d|30d|90d|all`, default `30d`) so the page is shareable and deep-linkable. [AnalyticsRangeFilter](../../components/admin/AnalyticsRangeFilter.tsx) writes to the URL via `router.replace` inside a `useTransition` so the select stays responsive while the server re-aggregates.
 
 **Pricing** is an editable constant table in [lib/analytics/pricing.ts](../../lib/analytics/pricing.ts) keyed by `<provider>:<model>` — when a provider changes prices, edit that file. Unknown models fall back to zero cost; the page caption flags that the totals are *estimates*.
+
+**Audio narration** — a second section below the translation one, fed by [audio-stats.ts](../../lib/analytics/audio-stats.ts) `fetchAudioAnalytics(range)` reading `tts_jobs` (same 10k-row cap, same range filter):
+
+- **KPIs** — runs, success rate, characters synthesized, avg latency, estimated cost.
+- **Provider / model usage table** — per (provider, `tts_model`): runs · success · latency · characters · est. cost. Lets you compare e.g. Sarvam `bulbul:v2` vs `bulbul:v3`.
+- **Voice usage** list (top voices by runs + characters) + **Top audio errors** (grouped `error_message`).
+
+TTS bills by **characters**, not tokens, so cost uses [pricing.ts](../../lib/analytics/pricing.ts) `estimateTtsCost(provider, model, characters)` against `TTS_PRICES_PER_MILLION_CHARS` — keyed `"<provider>:<model>"` lowercased (Sarvam keys contain a colon → `"sarvam:bulbul:v3"`). Those per-million-char rates are **rough placeholder estimates** the admin should edit.
 
 **Aggregation strategy** — fetch jobs + versions in range (capped at 10,000 rows) and bucket in JS. Admin-only surface + small volumes, so simpler than a Postgres RPC. The KPI caption shows a "showing most recent 10,000 attempts" hint when the cap kicks in; if that happens regularly, swap to a SQL aggregation function.
 
@@ -117,6 +125,31 @@ Backed by the singleton `ai_config` row with pinned UUID `00000000-…001`.
 
 ---
 
+## `/admin/tts-config` — Default TTS provider/model/voice
+
+**Files:** [page](../../app/admin/(protected)/tts-config/page.tsx) · [TtsConfigForm](../../components/admin/TtsConfigForm.tsx) · [actions](../../lib/actions/tts-config.ts) · [types](../../lib/actions/tts-config.types.ts)
+
+A near-exact mirror of the AI config page (same three-card layout):
+
+1. **Default provider, model & voice** — Provider Select (Sarvam + ElevenLabs)
+   disables ones without their env key (`· missing SARVAM_API_KEY`); a **Model**
+   Select (between Provider and Voice) lists that provider's engines; the Voice
+   Select is **scoped to the chosen model** (Sarvam v2/v3 have different speakers)
+   and resets to the model's default on a provider/model switch.
+   [saveTtsConfig](../../lib/actions/tts-config.ts) validates that the model
+   belongs to the provider and the voice to the model, then writes
+   `default_tts_provider` + `default_tts_model` + `default_voice_id`.
+2. **Test connection** — POSTs [/api/tts/test](../API/tts.md) (with the chosen
+   model); the returned base64 sample plays in an inline `<audio>`.
+3. **Provider status** — Configured / Missing badge per provider.
+
+Backed by the singleton `tts_config` row (pinned UUID `…001`). The server page
+strips [registry](../../lib/tts/registry.ts) meta to serializable props (no
+env-reading helpers cross into the client bundle). See
+[INTERNALS/tts-provider-adapter.md](../INTERNALS/tts-provider-adapter.md).
+
+---
+
 ## `/admin/stories` — Story listing
 
 **Files:** [page](../../app/admin/(protected)/stories/page.tsx) · [StoriesPanel](../../components/admin/StoriesPanel.tsx) · [actions](../../lib/actions/stories.ts)
@@ -160,7 +193,10 @@ All cascades use the React-19 "adjust state during render" pattern (no `useEffec
 ### Parts card
 
 - Manual rows: editable label + monospace textarea + remove + per-row word count
-- "Bulk import" launches [BulkImportDialog](../../components/admin/BulkImportDialog.tsx) — paste full story with separator (default `---` on its own line), live preview of detected parts, "Use these parts" replaces the current parts array
+- "Bulk import" launches [BulkImportDialog](../../components/admin/BulkImportDialog.tsx) with a **By separator | Auto-split** mode toggle:
+  - **By separator** — paste full story with a separator (default `---` on its own line)
+  - **Auto-split** — a numeric "Target words per part" input (default 800) feeds [smartSplit()](../../lib/stories/smart-split.ts), which packs paragraphs into near-equal parts on sentence boundaries (never mid-sentence → TTS-smooth) and merges a runt trailing part
+  - Both render the same live preview (per-part word counts) and call the existing `onImport(parts)` → "Use these parts" replaces the current parts array. Auto-split is **creation-only**; no schema/action changes
 - Total word count displayed at the top
 
 ### Save card
@@ -188,6 +224,23 @@ Breadcrumb · title · language + tone badges · provider · `Edit details` butt
 - Cancel button while running — aborts the in-flight `fetch` via `AbortController`; server-side `request.signal.aborted` stops the queue at the next part boundary
 - Last-run summary "X ok, Y failed" persists in component state
 
+### Audio narration section ([VariantPanel](../../components/admin/VariantPanel.tsx))
+
+A bordered block at the top of each variant's parts list (mirrors the translate
+queue card, parameterized for TTS):
+
+- **Provider + Model + Voice selects** — only TTS providers usable for this
+  variant's language appear (configured **and** have a voice for the language, so
+  Sarvam is absent for Urdu/Arabic). The **Model** select shows only when a
+  provider has >1 model; the Voice list is **scoped to the chosen model** (Sarvam
+  v2/v3 differ). Changing any persists via
+  [setVariantVoice](../../lib/actions/story-variants.ts)`(id, provider, model, voiceId)`
+  → `story_variants.tts_provider` + `tts_model` + `tts_voice_id`.
+- **Generate audio (N)** — counts translated parts without completed audio;
+  opens [/api/tts/queue](../API/tts.md) SSE. Cancel aborts via `AbortController`
+  (same pattern as the translate queue). The SSE reader is the shared
+  `consumeSse` helper, reused by both queues.
+
 ### Per-part editor — [PartCard](../../components/admin/PartCard.tsx)
 
 For each part, in `display_order`:
@@ -195,7 +248,9 @@ For each part, in `display_order`:
 | Header | Inline label edit · status badge (pending / translating / completed / edited / failed) · provider snapshot · ↑↓ reorder |
 |---|---|
 | Two columns | Original (collapsed by default with `max-h-96` + Edit toggle to swap to a Textarea) · Translation (always editable Textarea with autosave on blur) |
+| Translation toggle | A **Reading \| Narration** segmented control above the translation textarea swaps the bound field between `text` and `emotion_text` (the expressive TTS script — see [tts-provider-adapter.md](../INTERNALS/tts-provider-adapter.md)). Each autosaves to its own column on blur: Reading → [updatePartTexts](../../lib/actions/story-parts.ts) `textTranslated` (version snapshot on change), Narration → same action's `emotionText` (written directly, no version, no status change). A **Generate narration script** button ([generateNarration](../../lib/actions/story-parts.ts)) + status badge (generating / ready / failed) sits alongside |
 | Actions row | Translate / Re-translate (per-part) · History (n) → [VersionHistoryDialog](../../components/admin/VersionHistoryDialog.tsx) · Delete part (alert dialog) |
+| Audio row | Audio status badge (none / generating / ready / failed) · ▶ preview player when ready · Generate / Re-generate audio → [/api/tts](../API/tts.md) (disabled until the part has translated text). Audio narrates `emotion_text` (lazily generating it if absent), falling back to `text` |
 
 **Live status:** while a queue is running, `liveByPart` in StoryEditShell overrides the DB status for visible feedback. On settle, `router.refresh()` reconciles. PartCard uses the React-19 "adjust state during render" pattern so the new prop value (from the refresh) flows into the local textarea state — no more "had to refresh to see translation" bug.
 

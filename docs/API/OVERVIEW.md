@@ -1,13 +1,16 @@
 # API Overview
 
-> Seven HTTP endpoints. Everything else uses Server Actions or anon Supabase reads from server components.
+> Ten HTTP endpoints. Everything else uses Server Actions or anon Supabase reads from server components.
 
-All routes live under [app/api/](../../app/api/). The translate + upload + ai/test routes require `requireAdmin()` (see [UI/auth.md](../UI/auth.md)); the requests routes are **anonymous** (honeypot + IP rate-limit applied inside the handler).
+All routes live under [app/api/](../../app/api/). The translate + tts + upload + ai/test routes require `requireAdmin()` (see [UI/auth.md](../UI/auth.md)); the requests routes are **anonymous** (honeypot + IP rate-limit applied inside the handler).
 
 | Route | Method | Auth | Purpose | Doc |
 |---|---|---|---|---|
 | `/api/translate` | POST | admin | Translate one (variant × part) end-to-end | [translate.md](./translate.md) |
 | `/api/translate/queue` | POST | admin | SSE batch translation of a variant's pending part-translations | [translate.md](./translate.md) |
+| `/api/tts` | POST | admin | Generate audio for one (variant × part) | [tts.md](./tts.md) |
+| `/api/tts/queue` | POST | admin | SSE batch audio generation for a variant | [tts.md](./tts.md) |
+| `/api/tts/test` | POST | admin | Synthesize a short sample (returns base64 audio) | [tts.md](./tts.md) |
 | `/api/upload` | POST (multipart) | admin | ImageKit cover upload | [upload.md](./upload.md) |
 | `/api/ai/test` | POST | admin | Real round-trip to a provider with a known prompt | [ai-test.md](./ai-test.md) |
 | `/api/requests` | POST | **anon** | Submit a story / variant request (honeypot + rate-limited + dedupe→upvote) | [requests.md](./requests.md) |

@@ -122,7 +122,7 @@ Subscribes to the vocab store via `useSyncExternalStore`, so a save / unsave any
 
 **File:** [app/(public)/highlights/page.tsx](../../app/(public)/highlights/page.tsx) — pure Client Component.
 
-Lists every paragraph the reader has highlighted from the [HighlightMenu](../../components/reader/HighlightMenu.tsx) — newest first. Each row shows the colour-tinted snippet (captured at save time so paragraph re-flows don't invalidate the preview), the optional note, part number, save date, a "Back to the paragraph" deep link, and a trash button.
+Lists every passage the reader has highlighted — newest first. Highlights are created in-reader by selecting text and picking a colour from the floating [HighlightToolbar](../../components/reader/HighlightToolbar.tsx). Each row shows the colour-tinted snippet (the highlighted text, captured at save time so paragraph re-flows don't invalidate the preview), the optional note, part number, save date, a "Back to the paragraph" deep link, and a trash button.
 
 The deep link is `/s/<storyId>/<variantSlug>/p/<partNumber>#h-<paragraphIndex>` — [ReaderBody](../../components/reader/ReaderBody.tsx) picks up that hash on mount and `scrollIntoView`-s the matching `[data-paragraph]` element inside `requestAnimationFrame` (so the article has laid out at its final font size first).
 

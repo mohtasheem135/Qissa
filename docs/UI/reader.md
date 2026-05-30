@@ -75,7 +75,39 @@ A `hydratedRef = useRef(false)` flips to `true` *after* the microtask writes per
 
 Top + bottom bars. Always visible (the `visible` prop is wired but ReaderShell pins it to `true` — see "State owned by ReaderShell" above). Theme-aware via CSS custom properties (`var(--reader-chrome-bg)` etc.) set on the outer wrapper by [themeStyle(theme)](../../lib/reader/themes.ts).
 
-**Top bar:** Back link to `/s/<id>` · variant picker (when ≥2 published variants) · centered "Part X / N" · settings gear · [ShareButton](../../components/shared/ShareButton.tsx) · [BookmarkButton](../../components/shared/BookmarkButton.tsx). The share title runs through [toTitleCase()](../../lib/utils/title-case.ts).
+**Top bar:** Back link to `/s/<id>` · variant picker (when ≥2 published variants) · **[ListenButton](../../components/reader/ListenButton.tsx)** · centered "Part X / N" · settings gear · [ShareButton](../../components/shared/ShareButton.tsx) · [BookmarkButton](../../components/shared/BookmarkButton.tsx). The share title runs through [toTitleCase()](../../lib/utils/title-case.ts).
+
+### Listen control — [ListenButton](../../components/reader/ListenButton.tsx)
+
+A headphones toggle between the variant picker and the settings gear. The page
+passes `audioUrl` (the completed [`story_part_audio`](../04-database.md#416-story_part_audio)
+row composed via [audioUrl()](../../lib/r2/url.ts)), the translated `text`,
+`targetLanguage`, and `nextHref` (for auto-advance).
+
+- **Stored audio present** → the button opens an inline player (a native
+  `<audio controls autoPlay>` for play/pause/seek + `0.75/1/1.25/1.5×` speed
+  buttons) docked under the top bar, theme-styled with the reader CSS vars. The
+  active speed is a filled pill (inverts the chrome colours so it reads on every
+  theme).
+- **Continuous playback** → when a part's narration ends, ListenButton navigates
+  to `nextHref` with a `?play=1` flag; a part that loads with that flag
+  auto-resumes (opens the player / restarts speech) and strips the flag via
+  `history.replaceState` so a manual refresh won't re-fire. So pressing **Listen**
+  plays the whole story part-by-part until the last part. Works for both stored
+  audio and the Web Speech fallback.
+- **Remembered speed** → the chosen `0.75–1.5×` rate persists in localStorage
+  ([lib/reader/narration-rate.ts](../../lib/reader/narration-rate.ts), key
+  `qissa:narration-rate`) and is reapplied on every part + future session
+  (including after a browser resets `playbackRate` on media load). Used by both
+  the stored player and `createSpeechController`'s rate.
+- **No stored audio** → the **Web Speech** fallback
+  ([lib/reader/speech.ts](../../lib/reader/speech.ts)); the button toggles play /
+  stop. It **hides itself** when the device has no installed voice for the
+  language, and is never shown on the source reader (`targetLanguage === null`).
+  Honours the reader's chosen narration voice: ReaderShell resolves
+  `settings.narrationVoiceByLang[targetLanguage]` and threads it as `voiceURI`
+  through ReaderChrome → ListenButton → `createSpeechController` (see the
+  "Narration voice" picker below).
 
 **Bottom bar:** prev part button (disabled with 30% opacity when first) · `X / N` counter · next part button. Both prefetch via Next `<Link prefetch>`. Each link wraps an inner component that calls `useLinkStatus()` so the chevron swaps for a spinner (and `aria-busy` flips) while the next part is loading — the global [NavProgress](../../components/shared/NavProgress.tsx) bar is hidden inside the reader, so this is where pending feedback comes from.
 
@@ -126,20 +158,20 @@ The popover handles its own fetch state machine (loading / loaded / empty / erro
 
 The save state in the popover header subscribes to the vocab store via `useSyncExternalStore` so saves in one tab flip the icon in another.
 
-### Per-paragraph highlights
+### Text-selection highlights
 
-Every paragraph renders a small circular [HighlightHandle](../../components/reader/HighlightHandle.tsx) in the start margin (`inset-inline-start: -1.25rem` so it sits in the article's `px-5 sm:px-8` padding without overlapping the prose; the logical property flips automatically in RTL). Default opacity is 0.18 (invisible until hover or focus on desktop; faintly visible on mobile); a saved highlight pins the handle full-opacity in its colour so highlighted paragraphs are visible at a glance while scrolling.
+Highlights tint the exact selected words, the same way on mobile and desktop. The reader selects text (mouse drag on desktop, long-press on mobile); a `pointerup`/`keyup` listener on `document` (deferred via `setTimeout(0)`) calls [getSelectionSegments](../../lib/reader/selection.ts) on the live selection, and when a non-empty selection settles inside the article a small floating colour bar appears above it. Collapsing the selection dismisses the bar.
 
-Tapping the handle calls `getBoundingClientRect()` and opens [HighlightMenu](../../components/reader/HighlightMenu.tsx) anchored to that rect. The menu:
+The floating control is [HighlightToolbar](../../components/reader/HighlightToolbar.tsx), which has two modes:
 
-- Three colour swatches — yellow / green / blue. Tapping a swatch calls `saveHighlight()` immediately and updates `data-highlight="<colour>"` on the paragraph wrapper; CSS in [globals.css](../../app/globals.css) applies a translucent (rgba ~0.22) background to `.reader-translated` so the colour reads on all 5 themes including Night and Focus.
-- An optional note `<textarea>` — disabled until a colour is picked (a colourless highlight isn't a valid state). Persisted on blur via the same `saveHighlight()` call so every keystroke doesn't write localStorage.
-- A trash button (only visible for already-saved highlights) — calls `removeHighlight()` and closes the popover.
-- Dismisses on outside-click / Escape / scroll / resize.
+- **Create** — a compact 3-swatch bar (yellow / green / blue) over the selection. Tapping a swatch calls `addHighlight()` with the selection's per-paragraph segments, then `clearSelection()`. A selection spanning multiple paragraphs creates one highlight per paragraph it touches.
+- **Edit** — a popover anchored to a tapped `<mark>`. Swatches show the active colour, plus an optional note `<textarea>` (persisted on blur via `updateHighlight()`) and a remove button (`removeHighlight()`).
 
-Handle clicks call `stopPropagation` so the article-level tap-to-define handler never fires on top of opening the menu.
+Both modes dismiss on outside pointerdown + Escape; create mode also dismisses on scroll (the cached selection rect goes stale).
 
-Deep linking: each paragraph wrapper gets `id="h-<paragraphIndex>"`. On mount, if `window.location.hash` matches `^#h-(\d+)$`, [ReaderBody](../../components/reader/ReaderBody.tsx) finds the matching `[data-paragraph]` and `scrollIntoView({ block: "center", behavior: "smooth" })` inside a `requestAnimationFrame` so the article has laid out at its final font size first. This powers the "Back to the paragraph" links on [/highlights](../../app/(public)/highlights/page.tsx).
+[ReaderBody](../../components/reader/ReaderBody.tsx) renders each paragraph's translated text through a `renderHighlighted(text, marks, onMarkClick)` helper that wraps each stored range in `<mark className="reader-highlight" data-hl={id} data-colour={colour}>` (overlaps clipped left-to-right). CSS in [globals.css](../../app/globals.css) styles `.reader-translated mark.reader-highlight` with translucent per-colour backgrounds (~0.34–0.38 alpha) so the colour reads across all 5 themes including Night and Focus, `color: inherit`, rounded corners, and `cursor: pointer`. Tapping a mark opens the edit popover; tap-to-define still bails when there's an active selection.
+
+Deep linking: each paragraph wrapper gets `id="h-<paragraphIndex>"` (and now `data-pidx="<paragraphIndex>"`, read by [selection.ts](../../lib/reader/selection.ts)). On mount, if `window.location.hash` matches `^#h-(\d+)$`, [ReaderBody](../../components/reader/ReaderBody.tsx) finds the matching paragraph and `scrollIntoView({ block: "center", behavior: "smooth" })` inside a `requestAnimationFrame` so the article has laid out at its final font size first. This powers the "Back to the paragraph" links on [/highlights](../../app/(public)/highlights/page.tsx).
 
 Source reader supported too — highlights have no language dependency.
 
@@ -156,6 +188,7 @@ Sections:
 3. **Alignment** — segmented control (left / justify)
 4. **Font** — segmented control (serif / sans)
 5. **Show original text** — Switch (disabled with hint when the part has no original)
+6. **Narration voice** — a Select of [listVoicesForLanguage(targetLanguage)](../../lib/reader/speech.ts) plus an "Auto (default)" option, refreshed on `voiceschanged`. Writes `settings.narrationVoiceByLang[targetLanguage]` (lang code → `voiceURI`). Helper text: "Used for device narration when a part has no studio audio." Affects **only** the free Web Speech fallback — stored studio audio is unchanged. Requires the new `targetLanguage` prop.
 
 `onChange` calls back into ReaderShell which writes the whole `settings` blob to localStorage.
 

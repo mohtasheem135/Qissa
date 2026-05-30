@@ -14,7 +14,7 @@
 | `qissa:last-read` | `{ storyId, partNumber, updatedAt }` | `savePartProgress()` | [ContinueReading](../../components/shared/ContinueReading.tsx), [InstallPrompt](../../components/shared/InstallPrompt.tsx) (gate) |
 | `qissa:bookmarks` | string[] of story IDs | [bookmarks.ts](../../lib/reader/bookmarks.ts) | [BookmarkButton](../../components/shared/BookmarkButton.tsx), [BookmarksPage](../../app/(public)/bookmarks/page.tsx) |
 | `qissa:vocab` | `VocabEntry[]` (`{ word, languageCode, savedAt, storyId?, variantSlug?, partNumber? }`) | [vocab.ts](../../lib/reader/vocab.ts) — written by the [DefinitionPopover](../../components/reader/DefinitionPopover.tsx) save toggle | [DefinitionPopover](../../components/reader/DefinitionPopover.tsx) header (saved-state badge), [MyWordsPage](../../app/(public)/my-words/page.tsx), bookmark page header counter |
-| `qissa:highlights` | `Highlight[]` (`{ id, storyId, variantSlug, partNumber, paragraphIndex, colour, snippet, note?, createdAt }`) | [highlights.ts](../../lib/reader/highlights.ts) — written by the [HighlightMenu](../../components/reader/HighlightMenu.tsx) colour picker | [ReaderBody](../../components/reader/ReaderBody.tsx) (per-paragraph lookup + `data-highlight` attribute), [HighlightsPage](../../app/(public)/highlights/page.tsx), bookmark page header counter |
+| `qissa:highlights` | `Highlight[]` (`{ id, storyId, variantSlug, partNumber, paragraphIndex, startOffset, endOffset, colour, snippet, note?, createdAt }`) | [highlights.ts](../../lib/reader/highlights.ts) — written by the selection toolbar ([HighlightToolbar](../../components/reader/HighlightToolbar.tsx)) | [ReaderBody](../../components/reader/ReaderBody.tsx) (renders each stored range as a `<mark class="reader-highlight">`), [HighlightsPage](../../app/(public)/highlights/page.tsx), bookmark page header counter |
 | `qissa:installPromptDismissedAt` | epoch ms | [InstallPrompt](../../components/shared/InstallPrompt.tsx) | itself |
 
 ---
@@ -82,13 +82,19 @@ Same shape as `bookmarks.ts` + `vocab.ts` — cached snapshot for `useSyncExtern
 ```ts
 function getHighlights(): ReadonlyArray<Highlight>
 function getHighlightsForPart(storyId, variantSlug, partNumber): ReadonlyArray<Highlight>
-function getHighlightForParagraph(storyId, variantSlug, partNumber, paragraphIndex): Highlight | undefined
-function saveHighlight(input: SaveHighlightInput): Highlight
+function addHighlight(input): Highlight   // { startOffset, endOffset, colour, text, note?, … } → new range
+function updateHighlight(id: string, patch: { colour?; note? }): void
 function removeHighlight(id: string): void
 function subscribeHighlights(listener: () => void): () => void
 ```
 
-`Highlight` carries `{ id, storyId, variantSlug, partNumber, paragraphIndex, colour, snippet, note?, createdAt }`. Identity is the composite key `${storyId}:${variantSlug}:${partNumber}:${paragraphIndex}` — re-highlighting the same paragraph updates colour/note in place rather than appending. `snippet` is the first ~140 chars of the paragraph captured at first save so [/highlights](../../app/(public)/highlights/page.tsx) can show context without a follow-up DB query; `createdAt` survives colour/note edits so the index ordering stays stable.
+`Highlight` carries `{ id, storyId, variantSlug, partNumber, paragraphIndex, startOffset, endOffset, colour, snippet, note?, createdAt }`. Identity is a random `id` (`crypto.randomUUID()` with a fallback) — **not** a composite key — so multiple highlights per paragraph are allowed. `startOffset`/`endOffset` are character offsets within that paragraph's translated text (end exclusive), which is what lets the reader tint exact words rather than whole paragraphs. `addHighlight` always appends a fresh range (its `text` becomes the `snippet`); `updateHighlight(id, …)` patches colour/note on an existing one in place. `snippet` is the highlighted text (≤140 chars) captured at save time so [/highlights](../../app/(public)/highlights/page.tsx) can show context without a follow-up DB query; `createdAt` survives colour/note edits so the index ordering stays stable.
+
+Old paragraph-level records (which lack offsets) are dropped on parse, so any pre-existing highlights from the previous per-paragraph model disappear (intended).
+
+#### [lib/reader/selection.ts](../../lib/reader/selection.ts)
+
+`getSelectionSegments(article)` reads the live `window.getSelection()` and returns per-paragraph segments `{ paragraphIndex, startOffset, endOffset, snippet }[]` (or `null` when the selection is empty / outside the article). Offsets are computed against each `.reader-translated` element's text content via a `Range` from the paragraph start to each boundary (`Range.toString().length`), so they stay correct even when the paragraph already contains `<mark>` children. A selection spanning multiple paragraphs yields one segment each. Also exports `clearSelection()`.
 
 ### [lib/reader/progress.ts](../../lib/reader/progress.ts)
 
@@ -120,9 +126,10 @@ type ReaderSettings = {
   alignment: "left" | "justify";
   fontVariant: "sans" | "serif";
   showOriginal: boolean;
+  narrationVoiceByLang: Record<string, string>;   // lang code → SpeechSynthesisVoice.voiceURI
 };
 
-const DEFAULT_SETTINGS = { theme: "day", lineHeight: "normal", alignment: "justify", fontVariant: "serif", showOriginal: false };
+const DEFAULT_SETTINGS = { theme: "day", lineHeight: "normal", alignment: "justify", fontVariant: "serif", showOriginal: false, narrationVoiceByLang: {} };
 
 function getReaderSettings(): ReaderSettings
 function saveReaderSettings(next: ReaderSettings): void
@@ -218,6 +225,50 @@ export function toStoryCard(row: ...): StoryCardData;
 ```
 
 Every public listing page (home, subcategory, search, bookmarks) uses this constant + mapping. Adding a column to cards = touch one file.
+
+---
+
+## Web Speech fallback — [lib/reader/speech.ts](../../lib/reader/speech.ts)
+
+The free narration path behind the reader's [Listen control](../UI/reader.md).
+When a part has no pre-generated R2 audio, [ListenButton](../../components/reader/ListenButton.tsx)
+narrates with the device's `speechSynthesis`. SSR-safe (all access guarded by
+`typeof window`). Key exports:
+
+- `isSpeechSupported()` / `hasVoiceForLanguage(code)` — the button hides itself
+  when no installed voice matches the variant's language (coverage differs per
+  platform; iOS Safari and Android Chrome expose different voice sets).
+- `listVoicesForLanguage(code)` — installed voices whose `lang` matches the
+  language (prefix/base match). Backs the reader's "Narration voice" picker.
+- `pickVoice(code, preferredVoiceURI?)` — honours the user's chosen `voiceURI`
+  first if it still exists, else falls back to the first language match.
+- `createSpeechController(text, languageCode, callbacks, rate, preferredVoiceURI?)`
+  — returns `{ play, pause, resume, stop }`. It **chunks** the text into short
+  sentence-sized utterances (split on `. ! ? । ॥ …`) and queues them, because
+  Chromium silently stops long utterances after ~15s. Voices load async, so the
+  voice is resolved (via `pickVoice`) at `play()` time and on the `voiceschanged`
+  event.
+
+The chosen voice persists per-language in `settings.narrationVoiceByLang` (see
+above). [ReaderShell](../../components/reader/ReaderShell.tsx) resolves
+`narrationVoiceByLang[targetLanguage]` and threads it through
+[ReaderChrome](../../components/reader/ReaderChrome.tsx) →
+[ListenButton](../../components/reader/ListenButton.tsx) →
+`createSpeechController`. This affects **only** the free Web Speech fallback —
+stored R2 audio is unaffected.
+
+`stop()` is called on unmount and on part (text) change so speech never bleeds
+across navigations. Scroll position is session-only (a persistent audio-position
+store is a noted future refinement), but the **playback speed** is persisted in
+localStorage via [narration-rate.ts](../../lib/reader/narration-rate.ts) (key
+`qissa:narration-rate`) so it carries across parts and sessions.
+
+Stored premium audio uses a plain native `<audio>` element (seek/speed) inside
+ListenButton — no helper needed; the SW caches it for offline replay
+([pwa-service-worker.md](./pwa-service-worker.md)). **Continuous playback:** on
+`ended`, ListenButton navigates to the next part with `?play=1`; a part loaded
+with that flag auto-resumes and strips the flag — so one Listen press narrates
+the whole story part-by-part. Speed persists via `narration-rate.ts` above.
 
 ---
 

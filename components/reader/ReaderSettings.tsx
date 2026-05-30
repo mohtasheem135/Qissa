@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -8,7 +9,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { listVoicesForLanguage } from "@/lib/reader/speech";
 import { THEMES, THEME_KEYS, type ReaderTheme } from "@/lib/reader/themes";
 import type {
   Alignment,
@@ -17,6 +26,9 @@ import type {
   ReaderSettings,
 } from "@/lib/reader/reader-settings";
 
+/** Sentinel Select value for "no preference" (empty string isn't allowed). */
+const AUTO_VOICE = "__auto__";
+
 interface ReaderSettingsSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -24,6 +36,8 @@ interface ReaderSettingsSheetProps {
   onChange: (next: ReaderSettings) => void;
   /** True when the part actually has an original text we can show. */
   originalAvailable: boolean;
+  /** ISO code of the translated text — scopes the narration-voice picker. */
+  targetLanguage: string | null;
 }
 
 /**
@@ -36,9 +50,48 @@ export function ReaderSettingsSheet({
   settings,
   onChange,
   originalAvailable,
+  targetLanguage,
 }: ReaderSettingsSheetProps) {
   function update<K extends keyof ReaderSettings>(key: K, value: ReaderSettings[K]) {
     onChange({ ...settings, [key]: value });
+  }
+
+  // Installed device voices for this language. Voices load asynchronously, so
+  // re-read when `voiceschanged` fires (and only while the sheet is open).
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  useEffect(() => {
+    if (!open || !targetLanguage) return;
+    let cancelled = false;
+    const refresh = () => {
+      if (!cancelled) setVoices(listVoicesForLanguage(targetLanguage));
+    };
+    Promise.resolve().then(refresh);
+    const synth = typeof window !== "undefined" ? window.speechSynthesis : undefined;
+    if (synth && "onvoiceschanged" in synth) {
+      synth.addEventListener("voiceschanged", refresh);
+      return () => {
+        cancelled = true;
+        synth.removeEventListener("voiceschanged", refresh);
+      };
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [open, targetLanguage]);
+
+  const selectedVoiceURI = targetLanguage
+    ? settings.narrationVoiceByLang[targetLanguage] ?? AUTO_VOICE
+    : AUTO_VOICE;
+
+  function handleVoiceChange(value: string) {
+    if (!targetLanguage) return;
+    const next = { ...settings.narrationVoiceByLang };
+    if (value === AUTO_VOICE) {
+      delete next[targetLanguage];
+    } else {
+      next[targetLanguage] = value;
+    }
+    update("narrationVoiceByLang", next);
   }
 
   return (
@@ -121,6 +174,29 @@ export function ReaderSettingsSheet({
               disabled={!originalAvailable}
             />
           </section>
+
+          {/* Narration voice (Web Speech fallback only) */}
+          {targetLanguage && voices.length > 0 ? (
+            <section className="space-y-2">
+              <Label>Narration voice</Label>
+              <Select value={selectedVoiceURI} onValueChange={handleVoiceChange}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={AUTO_VOICE}>Auto (default)</SelectItem>
+                  {voices.map((v) => (
+                    <SelectItem key={v.voiceURI} value={v.voiceURI}>
+                      {v.name} ({v.lang})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-muted-foreground text-xs">
+                Used for device narration when a part has no studio audio.
+              </p>
+            </section>
+          ) : null}
         </div>
       </DialogContent>
     </Dialog>

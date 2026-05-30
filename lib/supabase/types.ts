@@ -160,11 +160,92 @@ export type Database = {
           },
         ]
       }
+      story_part_audio: {
+        Row: {
+          audio_path: string | null
+          byte_size: number | null
+          characters: number | null
+          created_at: string
+          duration_seconds: number | null
+          error_message: string | null
+          id: string
+          mime_type: string | null
+          status: string
+          story_part_id: string
+          story_part_translation_id: string
+          tts_model: string | null
+          tts_provider: string | null
+          updated_at: string
+          variant_id: string
+          voice_id: string | null
+        }
+        Insert: {
+          audio_path?: string | null
+          byte_size?: number | null
+          characters?: number | null
+          created_at?: string
+          duration_seconds?: number | null
+          error_message?: string | null
+          id?: string
+          mime_type?: string | null
+          status?: string
+          story_part_id: string
+          story_part_translation_id: string
+          tts_model?: string | null
+          tts_provider?: string | null
+          updated_at?: string
+          variant_id: string
+          voice_id?: string | null
+        }
+        Update: {
+          audio_path?: string | null
+          byte_size?: number | null
+          characters?: number | null
+          created_at?: string
+          duration_seconds?: number | null
+          error_message?: string | null
+          id?: string
+          mime_type?: string | null
+          status?: string
+          story_part_id?: string
+          story_part_translation_id?: string
+          tts_model?: string | null
+          tts_provider?: string | null
+          updated_at?: string
+          variant_id?: string
+          voice_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "story_part_audio_story_part_id_fkey"
+            columns: ["story_part_id"]
+            isOneToOne: false
+            referencedRelation: "story_parts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "story_part_audio_story_part_translation_id_fkey"
+            columns: ["story_part_translation_id"]
+            isOneToOne: true
+            referencedRelation: "story_part_translations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "story_part_audio_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "story_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       story_part_translations: {
         Row: {
           ai_model: string | null
           ai_provider: string | null
           created_at: string
+          emotion_status: string | null
+          emotion_text: string | null
           error_message: string | null
           id: string
           status: string
@@ -179,6 +260,8 @@ export type Database = {
           ai_model?: string | null
           ai_provider?: string | null
           created_at?: string
+          emotion_status?: string | null
+          emotion_text?: string | null
           error_message?: string | null
           id?: string
           status?: string
@@ -193,6 +276,8 @@ export type Database = {
           ai_model?: string | null
           ai_provider?: string | null
           created_at?: string
+          emotion_status?: string | null
+          emotion_text?: string | null
           error_message?: string | null
           id?: string
           status?: string
@@ -451,6 +536,7 @@ export type Database = {
         Row: {
           ai_model: string | null
           ai_provider: string | null
+          audio_status: string | null
           complexity: string
           created_at: string
           custom_instructions: string | null
@@ -466,11 +552,15 @@ export type Database = {
           title_translated: string | null
           tone_id: string
           total_words_translated: number
+          tts_model: string | null
+          tts_provider: string | null
+          tts_voice_id: string | null
           updated_at: string
         }
         Insert: {
           ai_model?: string | null
           ai_provider?: string | null
+          audio_status?: string | null
           complexity?: string
           created_at?: string
           custom_instructions?: string | null
@@ -486,11 +576,15 @@ export type Database = {
           title_translated?: string | null
           tone_id: string
           total_words_translated?: number
+          tts_model?: string | null
+          tts_provider?: string | null
+          tts_voice_id?: string | null
           updated_at?: string
         }
         Update: {
           ai_model?: string | null
           ai_provider?: string | null
+          audio_status?: string | null
           complexity?: string
           created_at?: string
           custom_instructions?: string | null
@@ -506,6 +600,9 @@ export type Database = {
           title_translated?: string | null
           tone_id?: string
           total_words_translated?: number
+          tts_model?: string | null
+          tts_provider?: string | null
+          tts_voice_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -693,14 +790,111 @@ export type Database = {
           },
         ]
       }
+      tts_config: {
+        Row: {
+          default_tts_model: string
+          default_tts_provider: string
+          default_voice_id: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          default_tts_model?: string
+          default_tts_provider?: string
+          default_voice_id?: string
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          default_tts_model?: string
+          default_tts_provider?: string
+          default_voice_id?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      tts_jobs: {
+        Row: {
+          attempt_number: number
+          characters: number | null
+          created_at: string
+          duration_ms: number | null
+          error_message: string | null
+          id: string
+          status: string
+          story_part_audio_id: string | null
+          story_part_translation_id: string
+          tts_model: string | null
+          tts_provider: string | null
+          variant_id: string
+          voice_id: string | null
+        }
+        Insert: {
+          attempt_number?: number
+          characters?: number | null
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          id?: string
+          status: string
+          story_part_audio_id?: string | null
+          story_part_translation_id: string
+          tts_model?: string | null
+          tts_provider?: string | null
+          variant_id: string
+          voice_id?: string | null
+        }
+        Update: {
+          attempt_number?: number
+          characters?: number | null
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          id?: string
+          status?: string
+          story_part_audio_id?: string | null
+          story_part_translation_id?: string
+          tts_model?: string | null
+          tts_provider?: string | null
+          variant_id?: string
+          voice_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tts_jobs_story_part_audio_id_fkey"
+            columns: ["story_part_audio_id"]
+            isOneToOne: false
+            referencedRelation: "story_part_audio"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tts_jobs_story_part_translation_id_fkey"
+            columns: ["story_part_translation_id"]
+            isOneToOne: false
+            referencedRelation: "story_part_translations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tts_jobs_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "story_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
       search_stories: {
-        Args: { q: string; max_results?: number }
-        Returns: { story_id: string; score: number }[]
+        Args: { max_results?: number; q: string }
+        Returns: {
+          score: number
+          story_id: string
+        }[]
       }
     }
     Enums: {
