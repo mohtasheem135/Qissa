@@ -12,7 +12,7 @@
  * The `activate` handler deletes caches that don't start with this prefix.
  */
 
-const CACHE_VERSION = "qissa-v2";
+const CACHE_VERSION = "qissa-v3";
 const HTML_CACHE = `${CACHE_VERSION}-html`;
 const IMAGE_CACHE = `${CACHE_VERSION}-images`;
 const AUDIO_CACHE = `${CACHE_VERSION}-audio`;
@@ -125,10 +125,16 @@ async function handleAudio(request) {
   const cached = await cache.match(request.url);
   if (cached) return cached;
   try {
-    // Fetch a full (non-range) copy so the file is replayable offline. Media
-    // elements accept a 200 full body even when they sent a Range request.
-    const fresh = await fetch(request.url);
-    if (fresh.ok) {
+    // R2's public r2.dev URL sends no CORS headers, and the <audio> element
+    // requests media in no-cors mode anyway — so fetch no-cors and get an
+    // OPAQUE response. A plain fetch() defaults to mode:"cors" and is blocked.
+    // Media elements play opaque responses, and the Cache API can store them.
+    // We strip the Range header (new Request from URL) so a full, replayable
+    // copy lands in the cache; media elements accept a 200 full body for a
+    // Range request.
+    const fresh = await fetch(request.url, { mode: "no-cors" });
+    // Opaque responses report status 0 / ok=false, so cache on type too.
+    if (fresh && (fresh.ok || fresh.type === "opaque")) {
       cache.put(request.url, fresh.clone()).catch(() => {});
     }
     return fresh;

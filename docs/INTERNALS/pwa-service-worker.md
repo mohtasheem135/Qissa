@@ -32,7 +32,7 @@ Trade-off: the first visit to each new route still has to fetch JS chunks (no pr
 ## Caching strategy
 
 ```js
-const CACHE_VERSION = "qissa-v2";
+const CACHE_VERSION = "qissa-v3";
 const HTML_CACHE = `${CACHE_VERSION}-html`;
 const IMAGE_CACHE = `${CACHE_VERSION}-images`;
 const AUDIO_CACHE = `${CACHE_VERSION}-audio`;
@@ -40,7 +40,7 @@ const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const OFFLINE_URL = "/offline";
 ```
 
-Bumping the version (now `v2`, added with the audio cache) invalidates all caches — the `activate` handler deletes any cache whose name doesn't start with the current prefix.
+Bumping the version (now `v3`) invalidates all caches — the `activate` handler deletes any cache whose name doesn't start with the current prefix.
 
 Per-request decision tree in `fetch` handler:
 
@@ -60,6 +60,12 @@ otherwise                   → don't intercept (default fetch)
 header) — media elements accept a 200 full body even when they sent a range
 request, and a fully-cached file is what replays offline. R2 hosts are matched
 by `r2.dev` / `r2.cloudflarestorage.com` (the SW can't read `NEXT_PUBLIC_*`).
+The fetch is **`mode: "no-cors"`** because R2's public `r2.dev` URL sends no
+CORS headers and the `<audio>` element requests media no-cors anyway. A plain
+`fetch()` defaults to `mode: "cors"` and is **blocked** (the symptom: a
+`sw.js`-initiated `CORS error` on the `.wav`/`.mp3` while the direct request is
+200). The result is an **opaque** response (`status 0`, `ok=false`), which still
+plays and can be cached — so `handleAudio` caches on `ok || type === "opaque"`.
 
 `/offline` is added to the HTML cache during `install` so it's available even if the user is offline on their first SW activation.
 
@@ -144,7 +150,7 @@ After `npm run build && npm run start`:
 2. **DevTools → Application → Service Workers** — `sw.js` registered + activated
 3. **DevTools → Network → throttle to Offline** → reload the page → previously-visited URL serves from cache; new URL falls back to `/offline`
 4. **Read one story** then reload — install prompt appears within seconds (Chromium only)
-5. **DevTools → Application → Storage → Cache Storage** — four caches: `qissa-v2-html`, `qissa-v2-images`, `qissa-v2-audio`, `qissa-v2-static`
+5. **DevTools → Application → Storage → Cache Storage** — four caches: `qissa-v3-html`, `qissa-v3-images`, `qissa-v3-audio`, `qissa-v3-static`
 
 ---
 
