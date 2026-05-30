@@ -12,7 +12,7 @@
  * The `activate` handler deletes caches that don't start with this prefix.
  */
 
-const CACHE_VERSION = "qissa-v2";
+const CACHE_VERSION = "qissa-v5";
 const HTML_CACHE = `${CACHE_VERSION}-html`;
 const IMAGE_CACHE = `${CACHE_VERSION}-images`;
 const AUDIO_CACHE = `${CACHE_VERSION}-audio`;
@@ -125,8 +125,11 @@ async function handleAudio(request) {
   const cached = await cache.match(request.url);
   if (cached) return cached;
   try {
-    // Fetch a full (non-range) copy so the file is replayable offline. Media
-    // elements accept a 200 full body even when they sent a Range request.
+    // The R2 bucket's CORS policy allows our origins, so an ordinary (cors)
+    // fetch of the full file succeeds and gives a transparent, verifiable,
+    // seekable response. Fetch from the URL string so the Range header is
+    // dropped and a full, replayable copy lands in the cache — media elements
+    // accept a 200 full body even when they sent a Range request.
     const fresh = await fetch(request.url);
     if (fresh.ok) {
       cache.put(request.url, fresh.clone()).catch(() => {});

@@ -60,6 +60,16 @@ export function HighlightToolbar({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [noteDraft, setNoteDraft] = useState(note ?? "");
 
+  // Touch devices pop a native text-selection menu (Copy / Share / Translate…)
+  // right over the selection, which would hide a bar anchored there. So on a
+  // coarse pointer we DOCK the create bar to the bottom of the screen instead.
+  // Desktop (mouse select → no native menu) keeps the near-selection placement.
+  const coarse =
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia("(pointer: coarse)").matches
+      : false;
+  const docked = mode === "create" && coarse;
+
   // Reset the note draft when a different highlight opens (microtask-defer to
   // keep the setState out of the effect body — React-19 lint).
   useEffect(() => {
@@ -83,17 +93,19 @@ export function HighlightToolbar({
     };
     document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("keydown", onKey);
-    if (mode === "create") {
+    // Scroll dismisses an anchored bar (its rect goes stale) — but NOT the
+    // bottom-docked one, which is fixed and survives scrolling/selection tweaks.
+    if (mode === "create" && !docked) {
       window.addEventListener("scroll", onClose, { passive: true, capture: true });
     }
     return () => {
       document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("keydown", onKey);
-      if (mode === "create") {
+      if (mode === "create" && !docked) {
         window.removeEventListener("scroll", onClose, { capture: true });
       }
     };
-  }, [mode, onClose]);
+  }, [mode, docked, onClose]);
 
   const placement = computePlacement(rect, mode);
   const width = mode === "create" ? CREATE_WIDTH : EDIT_WIDTH;
@@ -104,10 +116,22 @@ export function HighlightToolbar({
       role="dialog"
       aria-label={mode === "create" ? "Highlight selection" : "Edit highlight"}
       className="bg-popover text-popover-foreground fixed z-50 rounded-lg border shadow-xl"
-      style={{ top: placement.top, left: placement.left, width }}
+      style={
+        docked
+          ? {
+              left: "50%",
+              transform: "translateX(-50%)",
+              // Sit above the reader's bottom nav (h-14) + the safe-area inset.
+              bottom: "calc(env(safe-area-inset-bottom, 0px) + 4.75rem)",
+            }
+          : { top: placement.top, left: placement.left, width }
+      }
     >
       {mode === "create" ? (
         <div className="flex items-center gap-2 px-3 py-2">
+          {docked ? (
+            <span className="text-muted-foreground mr-0.5 text-xs font-medium">Highlight</span>
+          ) : null}
           {HIGHLIGHT_COLOURS.map((colour) => (
             <Swatch
               key={colour}

@@ -129,6 +129,18 @@ export function getHighlights(): ReadonlyArray<Highlight> {
   return cachedSnapshot;
 }
 
+/**
+ * Server snapshot for `useSyncExternalStore` — always `EMPTY`. Highlights live
+ * only in localStorage, so the server renders none; React also calls this for
+ * the client's hydration render, so returning `getHighlights` here (which reads
+ * real localStorage on the client) would render `<mark>`s during hydration and
+ * mismatch the plain-text server HTML. Returning `EMPTY` keeps hydration in sync
+ * and the real highlights paint in on the very next commit.
+ */
+export function getServerHighlights(): ReadonlyArray<Highlight> {
+  return EMPTY;
+}
+
 export function getHighlightsForPart(
   storyId: string,
   variantSlug: string,
