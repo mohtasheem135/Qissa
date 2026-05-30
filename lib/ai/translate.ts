@@ -21,3 +21,20 @@ export async function translate(
   const provider = await getProvider(providerId);
   return withRetry(() => provider.translate(input, options.modelName), options.retry);
 }
+
+/**
+ * Narrate: same machinery as translate(), but tags the input as `task:"narrate"`
+ * so the prompt builder returns the narration-director prompt instead of the
+ * translation prompt. Reuses getProvider + withRetry + every provider's
+ * translate() with zero provider changes. See lib/translation/run-narration.ts.
+ */
+export async function narrate(
+  providerId: ProviderId,
+  input: TranslationInput,
+  options: {
+    modelName?: string;
+    retry?: RetryOptions;
+  } = {},
+): Promise<TranslationOutput> {
+  return translate(providerId, { ...input, task: "narrate" }, options);
+}

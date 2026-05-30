@@ -42,14 +42,14 @@ export default function HighlightsPage() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Highlights</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Paragraphs you highlighted while reading. {highlights.length}{" "}
+          Passages you highlighted while reading. {highlights.length}{" "}
           {highlights.length === 1 ? "highlight" : "highlights"} on this device.
         </p>
       </header>
 
       {entries.length === 0 ? (
         <p className="text-muted-foreground text-sm">
-          Tap the dot in a paragraph&rsquo;s margin while reading to highlight it. Your highlights
+          Select any text while reading, then pick a colour to highlight it. Your highlights
           will appear here.
         </p>
       ) : (

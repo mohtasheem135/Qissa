@@ -19,6 +19,13 @@ export interface ReaderSettings {
   alignment: Alignment;
   fontVariant: FontVariant;
   showOriginal: boolean;
+  /**
+   * Preferred Web Speech voice per language code (lang → voiceURI), used only
+   * by the free device-narration fallback when a part has no studio MP3. Empty
+   * = auto-pick. The `{...DEFAULT_SETTINGS, ...parsed}` merge below back-fills
+   * this for settings saved before the key existed.
+   */
+  narrationVoiceByLang: Record<string, string>;
 }
 
 export const DEFAULT_SETTINGS: ReaderSettings = {
@@ -27,6 +34,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   alignment: "justify",
   fontVariant: "serif",
   showOriginal: false,
+  narrationVoiceByLang: {},
 };
 
 export const LINE_HEIGHT_VALUES: Record<LineHeight, number> = {

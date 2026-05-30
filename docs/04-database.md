@@ -103,6 +103,10 @@ Then run `npm run typecheck` to catch any references to renamed/dropped columns.
 | [`20260522120003_seed_initial_data.sql`](../supabase/migrations/20260522120003_seed_initial_data.sql) | 13 languages, 28 tones, `ai_config` singleton — idempotent |
 | [`20260524120000_variants_and_requests.sql`](../supabase/migrations/20260524120000_variants_and_requests.sql) | **Multi-variant translations** (`story_variants`, `story_part_translations`) + **reader requests** (`story_requests`, `story_request_votes`). Reshapes `stories` + `story_parts` to remove per-variant fields; backfills one primary variant per existing story before the column drops. See §4.10–§4.13. |
 | [`20260529120000_search_stories_rpc.sql`](../supabase/migrations/20260529120000_search_stories_rpc.sql) | **Public search across original title + author + per-variant translated title.** Adds pg_trgm GIN indexes on `stories.author_original` and `story_variants.title_translated`, and defines the `search_stories(q, max_results)` RPC ranked by best-of-three trigram similarity. See [UI/public.md → /search](./UI/public.md). |
+| [`20260530120000_tts.sql`](../supabase/migrations/20260530120000_tts.sql) | **Text-to-speech (audio narration).** Adds `tts_config` singleton, `story_part_audio` (one premium audio file per translation row), `tts_jobs` (per-attempt log), and `tts_provider`/`tts_voice_id`/`audio_status` on `story_variants`. Audio bytes live in Cloudflare R2; only the path is stored. See [tts-provider-adapter.md](./INTERNALS/tts-provider-adapter.md). |
+| [`20260530130000_emotion_narration.sql`](../supabase/migrations/20260530130000_emotion_narration.sql) | **Expressive TTS narration script.** Adds nullable `emotion_text` + `emotion_status` to `story_part_translations` — the lazily-generated script the audio pipeline narrates instead of the clean reading `text`. See §4.11 + [tts-provider-adapter.md](./INTERNALS/tts-provider-adapter.md). |
+| [`20260530140000_tts_bulbul_v3.sql`](../supabase/migrations/20260530140000_tts_bulbul_v3.sql) | **Sarvam → bulbul:v3 (audiobook voices).** Data-only hygiene: resets stored `bulbul:v2` speaker ids (in `tts_config.default_voice_id` + `story_variants.tts_voice_id`) to the new v3 default after the provider moved to the 36-voice audiobook model. No schema change. |
+| [`20260530150000_tts_model_selection.sql`](../supabase/migrations/20260530150000_tts_model_selection.sql) | **Selectable TTS model (engine) per provider.** Adds `tts_config.default_tts_model` (`not null default 'bulbul:v3'`) and nullable `tts_model` to `story_variants`, `story_part_audio`, and `tts_jobs` — the admin picks a default engine and can override per variant; voices are model-scoped (Sarvam v2/v3 have different speaker sets). Feeds the audio analytics by-model breakdown. See §4.14–§4.17 + [tts-provider-adapter.md](./INTERNALS/tts-provider-adapter.md). |
 
 ---
 
@@ -375,6 +379,8 @@ One row per `(variant, story_part)` — the actual translated text plus its per-
 | `word_count` | `int` default 0 | |
 | `ai_provider`, `ai_model` | `text` | Snapshot from the last translate attempt |
 | `error_message` | `text` | Last error if `status='failed'` |
+| `emotion_text` | `text` | Expressive TTS narration script — what the audio pipeline narrates instead of `text` (Feature: emotion narration). Generated lazily at audio-generation time or via the admin "Generate narration script" button; emotion is carried only by punctuation/pacing + `<break time="…"/>` tags. **Not versioned in v1** (no `story_part_versions` snapshot). See [tts-provider-adapter.md](./INTERNALS/tts-provider-adapter.md). |
+| `emotion_status` | `text` | `CHECK in ('generating','ready','failed')` (nullable — null = never generated). Lifecycle of the `emotion_text` rewrite, independent of `status` |
 | `translated_at` | `timestamptz` | Set when `status` transitions to `completed`/`edited` |
 | `created_at`, `updated_at` | `timestamptz` | |
 
@@ -428,6 +434,64 @@ Per-IP upvote dedupe table for `story_requests`. The voter is identified by `sha
 **PK:** `(request_id, voter_hash)` — duplicate vote attempts trip the unique error, which the API handler converts to `{ ok: true, alreadyVoted: true }`.
 
 **RLS:** No anon policies — gated through `/api/requests/[id]/vote`.
+
+---
+
+### 4.14 `tts_config`
+
+Singleton (pinned `id = …0001`, like `ai_config`) holding the global default
+TTS provider/voice. Migration: `20260530120000_tts.sql`.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` PK | Pinned singleton id |
+| `default_tts_provider` | `text` NOT NULL default `'sarvam'` | |
+| `default_tts_model` | `text` NOT NULL default `'bulbul:v3'` | Default synthesis engine (migration `20260530150000`); must be a model of the provider |
+| `default_voice_id` | `text` NOT NULL default `'anushka'` | Must belong to `default_tts_model` |
+| `updated_at` | `timestamptz` | `set_updated_at` trigger |
+
+**RLS:** enabled, no anon policy (service-role only).
+
+### 4.15 `story_variants` (added columns)
+
+`tts_provider text`, `tts_model text` (migration `20260530150000`),
+`tts_voice_id text`, `audio_status text` — all nullable; the per-variant
+provider/model/voice choice, mirroring `ai_provider`/`ai_model`. The voice is
+scoped to `tts_model` at synthesis time.
+
+### 4.16 `story_part_audio`
+
+One premium audio file per translation row (re-generate overwrites). Audio bytes
+live in R2; the row stores the provider-agnostic `audio_path` (the R2 object key).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` PK | |
+| `story_part_translation_id` | `uuid` NOT NULL **unique** → `story_part_translations(id)` | one audio per translation |
+| `variant_id` | `uuid` NOT NULL → `story_variants(id)` | |
+| `story_part_id` | `uuid` NOT NULL → `story_parts(id)` | |
+| `tts_provider` / `voice_id` | `text` | |
+| `tts_model` | `text` | nullable; the synthesis engine used (migration `20260530150000`) |
+| `status` | `text` | `pending`/`generating`/`completed`/`failed` |
+| `audio_path` | `text` | R2 object key, e.g. `audio/<variantId>/1-anushka.mp3` |
+| `mime_type` / `duration_seconds` / `byte_size` / `characters` | | metadata |
+| `error_message` | `text` | |
+| `created_at` / `updated_at` | `timestamptz` | |
+
+**RLS:** anon SELECT for audio of published+active variants — copied verbatim
+from the `story_part_translations` policy.
+
+### 4.17 `tts_jobs`
+
+Per-attempt log mirroring `translation_jobs` (feeds the
+[`/admin/analytics`](./UI/admin.md#adminanalytics--translation--audio-analytics)
+audio breakdown):
+`story_part_audio_id`, `story_part_translation_id`, `variant_id`,
+`attempt_number`, `status` (`started`/`succeeded`/`failed`), `tts_provider`,
+`tts_model` (nullable, migration `20260530150000`), `voice_id`, `characters`,
+`duration_ms`, `error_message`, `created_at`.
+
+**RLS:** enabled, no anon policy (service-role only).
 
 ---
 

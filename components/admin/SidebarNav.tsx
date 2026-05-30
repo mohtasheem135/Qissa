@@ -13,6 +13,7 @@ const NAV_ITEMS: Array<{ href: string; label: string }> = [
   { href: "/admin/tones", label: "Tones" },
   { href: "/admin/languages", label: "Languages" },
   { href: "/admin/ai-config", label: "AI config" },
+  { href: "/admin/tts-config", label: "TTS / Voices" },
 ];
 
 interface SidebarNavProps {

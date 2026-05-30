@@ -1,22 +1,22 @@
 /**
- * Per-paragraph highlight storage for the reader. Mirrors [bookmarks.ts] +
+ * Selection-range highlight storage for the reader. Mirrors [bookmarks.ts] +
  * [vocab.ts]: cached snapshot for `useSyncExternalStore`, cross-tab sync via
  * the `qissa:highlights-changed` CustomEvent + native `storage` event.
  *
- * Highlights are keyed by (storyId, variantSlug, partNumber, paragraphIndex) —
- * one highlight per paragraph max. Re-highlighting the same paragraph
- * replaces the existing colour/note instead of adding a duplicate.
+ * A highlight marks an **exact character range** inside one paragraph:
+ * (storyId, variantSlug, partNumber, paragraphIndex, startOffset, endOffset).
+ * Offsets are indices into that paragraph's translated text. A selection that
+ * spans several paragraphs is stored as one highlight per paragraph it touches
+ * (see lib/reader/selection.ts). Multiple highlights per paragraph are allowed.
  *
- * A `snippet` (first ~120 chars of the paragraph) is captured at save time
- * so the /highlights index can show context without a follow-up DB query.
- * If the underlying translation is later regenerated and paragraphs shift,
- * the snippet stays accurate even though the deep-link target may have
- * drifted — acceptable for v0.
+ * `snippet` (the highlighted text, ≤140 chars) is captured at save time so the
+ * /highlights index can show context without re-deriving it. If the underlying
+ * translation is later regenerated and offsets drift, the snippet stays
+ * accurate even though the on-page span may shift — acceptable for v1.
  *
- * Phase 2 will migrate this into a `highlights` table keyed by auth.uid
- * when reader accounts arrive. The localStorage key stays namespaced
- * (`qissa:highlights`) so the future migration can read and upload the
- * local list on first sign-in.
+ * Phase 2 will migrate this into a `highlights` table keyed by auth.uid when
+ * reader accounts arrive; the localStorage key stays namespaced
+ * (`qissa:highlights`) so the migration can read + upload the local list.
  */
 
 const STORAGE_KEY = "qissa:highlights";
@@ -24,21 +24,21 @@ const SNIPPET_MAX = 140;
 
 export type HighlightColour = "yellow" | "green" | "blue";
 
-export const HIGHLIGHT_COLOURS: ReadonlyArray<HighlightColour> = [
-  "yellow",
-  "green",
-  "blue",
-];
+export const HIGHLIGHT_COLOURS: ReadonlyArray<HighlightColour> = ["yellow", "green", "blue"];
 
 export interface Highlight {
-  /** Stable identity: `${storyId}:${variantSlug}:${partNumber}:${paragraphIndex}`. */
+  /** Stable random id (one per stored range). */
   id: string;
   storyId: string;
   variantSlug: string;
   partNumber: number;
   paragraphIndex: number;
+  /** Inclusive char offset of the range start within the paragraph's text. */
+  startOffset: number;
+  /** Exclusive char offset of the range end. */
+  endOffset: number;
   colour: HighlightColour;
-  /** First ~140 chars of the paragraph, captured at save time for the index page. */
+  /** The highlighted text (≤140 chars), captured at save time for the index. */
   snippet: string;
   note?: string;
   /** ISO timestamp of first save (not updated on colour/note edits). */
@@ -68,6 +68,10 @@ function parseRaw(raw: string | null): ReadonlyArray<Highlight> {
       const variantSlug = typeof r.variantSlug === "string" ? r.variantSlug : null;
       const partNumber = typeof r.partNumber === "number" ? r.partNumber : null;
       const paragraphIndex = typeof r.paragraphIndex === "number" ? r.paragraphIndex : null;
+      // Records without offsets are the old paragraph-level model — dropped
+      // (the reader opted into selection highlights, replacing those).
+      const startOffset = typeof r.startOffset === "number" ? r.startOffset : null;
+      const endOffset = typeof r.endOffset === "number" ? r.endOffset : null;
       const colour = isColour(r.colour) ? r.colour : null;
       const snippet = typeof r.snippet === "string" ? r.snippet : null;
       const createdAt = typeof r.createdAt === "string" ? r.createdAt : null;
@@ -77,6 +81,9 @@ function parseRaw(raw: string | null): ReadonlyArray<Highlight> {
         !variantSlug ||
         partNumber === null ||
         paragraphIndex === null ||
+        startOffset === null ||
+        endOffset === null ||
+        endOffset <= startOffset ||
         !colour ||
         snippet === null ||
         !createdAt
@@ -89,6 +96,8 @@ function parseRaw(raw: string | null): ReadonlyArray<Highlight> {
         variantSlug,
         partNumber,
         paragraphIndex,
+        startOffset,
+        endOffset,
         colour,
         snippet,
         createdAt,
@@ -120,36 +129,14 @@ export function getHighlights(): ReadonlyArray<Highlight> {
   return cachedSnapshot;
 }
 
-export function highlightId(
-  storyId: string,
-  variantSlug: string,
-  partNumber: number,
-  paragraphIndex: number,
-): string {
-  return `${storyId}:${variantSlug}:${partNumber}:${paragraphIndex}`;
-}
-
 export function getHighlightsForPart(
   storyId: string,
   variantSlug: string,
   partNumber: number,
 ): ReadonlyArray<Highlight> {
   return getHighlights().filter(
-    (h) =>
-      h.storyId === storyId &&
-      h.variantSlug === variantSlug &&
-      h.partNumber === partNumber,
+    (h) => h.storyId === storyId && h.variantSlug === variantSlug && h.partNumber === partNumber,
   );
-}
-
-export function getHighlightForParagraph(
-  storyId: string,
-  variantSlug: string,
-  partNumber: number,
-  paragraphIndex: number,
-): Highlight | undefined {
-  const target = highlightId(storyId, variantSlug, partNumber, paragraphIndex);
-  return getHighlights().find((h) => h.id === target);
 }
 
 function writeHighlights(next: ReadonlyArray<Highlight>): void {
@@ -165,55 +152,67 @@ function writeHighlights(next: ReadonlyArray<Highlight>): void {
   emitChange();
 }
 
-export interface SaveHighlightInput {
+function newId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `h_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+export interface AddHighlightInput {
   storyId: string;
   variantSlug: string;
   partNumber: number;
   paragraphIndex: number;
+  startOffset: number;
+  endOffset: number;
   colour: HighlightColour;
+  /** The selected text — captured (trimmed, truncated) as the snippet. */
   text: string;
   note?: string;
 }
 
-/**
- * Insert or update the highlight for a paragraph. When an existing highlight
- * for the same (storyId, variantSlug, partNumber, paragraphIndex) is present,
- * the colour and note are updated but `createdAt` and `snippet` stay
- * (snippet stays so paragraph re-flows don't silently invalidate index
- * previews; createdAt stays so the ordering on /highlights is stable).
- */
-export function saveHighlight(input: SaveHighlightInput): Highlight {
-  const id = highlightId(
-    input.storyId,
-    input.variantSlug,
-    input.partNumber,
-    input.paragraphIndex,
-  );
-  const current = getHighlights();
-  const existing = current.find((h) => h.id === id);
-
-  const next: Highlight = existing
-    ? {
-        ...existing,
-        colour: input.colour,
-        note: input.note?.trim() ? input.note.trim() : undefined,
-      }
-    : {
-        id,
-        storyId: input.storyId,
-        variantSlug: input.variantSlug,
-        partNumber: input.partNumber,
-        paragraphIndex: input.paragraphIndex,
-        colour: input.colour,
-        snippet: input.text.trim().slice(0, SNIPPET_MAX),
-        note: input.note?.trim() ? input.note.trim() : undefined,
-        createdAt: new Date().toISOString(),
-      };
-
-  writeHighlights(
-    existing ? current.map((h) => (h.id === id ? next : h)) : [...current, next],
-  );
+/** Create a new highlight for a selected range. Returns the stored row. */
+export function addHighlight(input: AddHighlightInput): Highlight {
+  const next: Highlight = {
+    id: newId(),
+    storyId: input.storyId,
+    variantSlug: input.variantSlug,
+    partNumber: input.partNumber,
+    paragraphIndex: input.paragraphIndex,
+    startOffset: input.startOffset,
+    endOffset: input.endOffset,
+    colour: input.colour,
+    snippet: input.text.trim().slice(0, SNIPPET_MAX),
+    note: input.note?.trim() ? input.note.trim() : undefined,
+    createdAt: new Date().toISOString(),
+  };
+  writeHighlights([...getHighlights(), next]);
   return next;
+}
+
+/** Patch an existing highlight's colour and/or note. */
+export function updateHighlight(
+  id: string,
+  patch: { colour?: HighlightColour; note?: string | null },
+): void {
+  const current = getHighlights();
+  let changed = false;
+  const next = current.map((h) => {
+    if (h.id !== id) return h;
+    changed = true;
+    return {
+      ...h,
+      colour: patch.colour ?? h.colour,
+      note:
+        patch.note === undefined
+          ? h.note
+          : patch.note && patch.note.trim().length > 0
+            ? patch.note.trim()
+            : undefined,
+    };
+  });
+  if (changed) writeHighlights(next);
 }
 
 export function removeHighlight(id: string): void {

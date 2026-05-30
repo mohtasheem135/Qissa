@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",
+    "@aws-sdk/client-s3": "^3.1057.0",
     "@google/genai": "^2.6.0",
     "@lottiefiles/dotlottie-react": "^0.19.4",
     "@supabase/ssr": "^0.10.3",

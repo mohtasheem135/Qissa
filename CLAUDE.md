@@ -73,6 +73,7 @@ The docs are **living** — keep them in sync with code.
 | A route or page | [docs/UI/*.md](./docs/UI/) — the file matching that route group |
 | An API route | [docs/API/*.md](./docs/API/) — the file matching that endpoint |
 | `lib/ai/*` (providers, prompt, retry) | [docs/INTERNALS/ai-provider-adapter.md](./docs/INTERNALS/ai-provider-adapter.md) |
+| `lib/tts/*` or `lib/r2/*` (TTS providers, voices, audio storage) | [docs/INTERNALS/tts-provider-adapter.md](./docs/INTERNALS/tts-provider-adapter.md) + [docs/API/tts.md](./docs/API/tts.md) |
 | `lib/actions/*` (any Server Action) | [docs/INTERNALS/server-actions.md](./docs/INTERNALS/server-actions.md) + the relevant [docs/UI/admin.md](./docs/UI/admin.md) section |
 | `lib/supabase/*` | [docs/INTERNALS/supabase-clients.md](./docs/INTERNALS/supabase-clients.md) |
 | `lib/reader/*` (themes, settings, progress, bookmarks) | [docs/INTERNALS/reader-state.md](./docs/INTERNALS/reader-state.md) + [docs/UI/reader.md](./docs/UI/reader.md) if it affects the cockpit |
@@ -104,12 +105,14 @@ docs/
     admin.md                   — admin shell + CRUD + story workflow
     auth.md                    — login + middleware (proxy) + requireAdmin
   API/
-    OVERVIEW.md                — all 4 endpoints summary
+    OVERVIEW.md                — all endpoints summary
     translate.md               — /api/translate + /api/translate/queue (SSE)
+    tts.md                     — /api/tts + /api/tts/queue (SSE) + /api/tts/test
     upload.md                  — /api/upload (ImageKit, path-only)
     ai-test.md                 — /api/ai/test (real round-trip)
   INTERNALS/
     ai-provider-adapter.md     — lib/ai/* + how to add a new provider
+    tts-provider-adapter.md    — lib/tts/* + lib/r2/* (audio narration)
     server-actions.md          — lib/actions/* pattern + "use server" rules
     supabase-clients.md        — 3 clients + RLS + types regen
     reader-state.md            — themes, settings, font size, progress, bookmarks

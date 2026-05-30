@@ -12,14 +12,21 @@ import { pairParagraphs } from "@/lib/reader/paragraphs";
 import { LINE_HEIGHT_VALUES, type ReaderSettings } from "@/lib/reader/reader-settings";
 import type { ReaderTheme } from "@/lib/reader/themes";
 import { DefinitionPopover, type DefinitionAnchor } from "./DefinitionPopover";
-import { HighlightHandle } from "./HighlightHandle";
-import { HighlightMenu, type HighlightTarget } from "./HighlightMenu";
+import { HighlightToolbar } from "./HighlightToolbar";
 import {
+  addHighlight,
   getHighlights,
-  getHighlightForParagraph,
+  removeHighlight,
   subscribeHighlights,
+  updateHighlight,
   type Highlight,
+  type HighlightColour,
 } from "@/lib/reader/highlights";
+import {
+  clearSelection,
+  getSelectionSegments,
+  type HighlightSegment,
+} from "@/lib/reader/selection";
 
 interface ReaderBodyProps {
   partLabel: string;
@@ -48,6 +55,11 @@ interface ReaderBodyProps {
   storyId: string;
   variantSlug: string;
 }
+
+type ToolbarState =
+  | { mode: "create"; rect: DOMRect; segments: HighlightSegment[] }
+  | { mode: "edit"; rect: DOMRect; highlight: Highlight }
+  | null;
 
 /**
  * The reading article. Pure presentation — the ReaderShell owns the
@@ -89,51 +101,121 @@ export function ReaderBody({
   const [anchor, setAnchor] = useState<DefinitionAnchor | null>(null);
   const handleCloseAnchor = useCallback(() => setAnchor(null), []);
 
-  const [highlightTarget, setHighlightTarget] = useState<HighlightTarget | null>(null);
-  const handleCloseHighlightMenu = useCallback(() => setHighlightTarget(null), []);
+  // Floating highlight control: "create" over a fresh selection, "edit" when an
+  // existing highlight (mark) is tapped.
+  const [toolbar, setToolbar] = useState<ToolbarState>(null);
+  const closeToolbar = useCallback(() => setToolbar(null), []);
 
-  // Per-paragraph highlight lookup, keyed by paragraph index. Subscribing to
-  // the whole vocab list (then filtering) is cheap — total highlights are
-  // bounded by what a single reader manually saves.
+  // All highlights for this part, grouped by paragraph index (a paragraph can
+  // hold several). Subscribing to the whole list then filtering is cheap.
   const allHighlights = useSyncExternalStore(
     subscribeHighlights,
     getHighlights,
     getHighlights,
   );
   const paragraphHighlights = useMemo(() => {
-    const map = new Map<number, Highlight>();
+    const map = new Map<number, Highlight[]>();
     for (const h of allHighlights) {
-      if (
-        h.storyId === storyId &&
-        h.variantSlug === variantSlug &&
-        h.partNumber === partNumber
-      ) {
-        map.set(h.paragraphIndex, h);
+      if (h.storyId === storyId && h.variantSlug === variantSlug && h.partNumber === partNumber) {
+        const list = map.get(h.paragraphIndex);
+        if (list) list.push(h);
+        else map.set(h.paragraphIndex, [h]);
       }
     }
     return map;
   }, [allHighlights, storyId, variantSlug, partNumber]);
 
-  const handleOpenHighlightMenu = useCallback(
-    (paragraphIndex: number, rect: DOMRect) => {
-      // Defer the lookup to the click site rather than caching by index in
-      // case `paragraphs` re-renders between subscribe + click.
-      const existing =
-        getHighlightForParagraph(storyId, variantSlug, partNumber, paragraphIndex) ??
-        null;
-      const paragraphText = paragraphs[paragraphIndex]?.translated ?? "";
-      setHighlightTarget({
-        rect,
-        storyId,
-        variantSlug,
-        partNumber,
-        paragraphIndex,
-        paragraphText,
-        existing,
+  // Tap an existing highlight → open the edit popover anchored to it.
+  const handleMarkClick = useCallback((event: React.MouseEvent<HTMLElement>, highlight: Highlight) => {
+    event.stopPropagation();
+    setToolbar({ mode: "edit", rect: event.currentTarget.getBoundingClientRect(), highlight });
+  }, []);
+
+  // Watch the text selection. When it settles on a non-empty range inside the
+  // article, show the create bar; when it collapses, dismiss the create bar
+  // (leaving any open edit popover alone). pointerup covers mouse + touch;
+  // keyup covers shift-arrow keyboard selection.
+  useEffect(() => {
+    const article = articleRef.current;
+    if (!article) return;
+    function check() {
+      if (!article) return;
+      const segments = getSelectionSegments(article);
+      if (!segments) {
+        setToolbar((cur) => (cur && cur.mode === "create" ? null : cur));
+        return;
+      }
+      const sel = window.getSelection();
+      const rect = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).getBoundingClientRect() : null;
+      if (!rect || (rect.width === 0 && rect.height === 0)) return;
+      setToolbar({ mode: "create", rect, segments });
+    }
+    // Defer past the gesture so the selection has settled before we read it.
+    const onPointerUp = () => setTimeout(check, 0);
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.shiftKey || e.key.startsWith("Arrow")) setTimeout(check, 0);
+    };
+    document.addEventListener("pointerup", onPointerUp);
+    document.addEventListener("keyup", onKeyUp);
+    return () => {
+      document.removeEventListener("pointerup", onPointerUp);
+      document.removeEventListener("keyup", onKeyUp);
+    };
+  }, []);
+
+  // Create: colour every paragraph-segment of the current selection.
+  const handleCreate = useCallback(
+    (colour: HighlightColour, segments: HighlightSegment[]) => {
+      for (const seg of segments) {
+        addHighlight({
+          storyId,
+          variantSlug,
+          partNumber,
+          paragraphIndex: seg.paragraphIndex,
+          startOffset: seg.startOffset,
+          endOffset: seg.endOffset,
+          colour,
+          text: seg.snippet,
+        });
+      }
+      clearSelection();
+      setToolbar(null);
+    },
+    [storyId, variantSlug, partNumber],
+  );
+
+  // NB: storage mutations (add/update/remove) run in the event-handler body,
+  // never inside a setToolbar(updater) — the updater executes during render,
+  // and the resulting highlights-store change would be a setState-in-render.
+  const handleToolbarPick = useCallback(
+    (colour: HighlightColour) => {
+      if (!toolbar) return;
+      if (toolbar.mode === "create") {
+        handleCreate(colour, toolbar.segments);
+        return;
+      }
+      updateHighlight(toolbar.highlight.id, { colour });
+      setToolbar({ ...toolbar, highlight: { ...toolbar.highlight, colour } });
+    },
+    [toolbar, handleCreate],
+  );
+
+  const handleEditNote = useCallback(
+    (note: string) => {
+      if (!toolbar || toolbar.mode !== "edit") return;
+      updateHighlight(toolbar.highlight.id, { note });
+      setToolbar({
+        ...toolbar,
+        highlight: { ...toolbar.highlight, note: note.trim() || undefined },
       });
     },
-    [storyId, variantSlug, partNumber, paragraphs],
+    [toolbar],
   );
+
+  const handleEditRemove = useCallback(() => {
+    if (toolbar && toolbar.mode === "edit") removeHighlight(toolbar.highlight.id);
+    setToolbar(null);
+  }, [toolbar]);
 
   // Scroll-into-view for deep links from /highlights — `#h-<paragraphIndex>`.
   // Runs after paint so the article has laid out at its final font size.
@@ -264,21 +346,22 @@ export function ReaderBody({
 
         <div className="space-y-5">
           {paragraphs.map((p, idx) => {
-            const highlight = paragraphHighlights.get(idx);
+            const marks = paragraphHighlights.get(idx);
             return (
               <div
                 key={idx}
                 id={`h-${idx}`}
                 data-paragraph
-                data-highlight={highlight?.colour}
+                data-pidx={idx}
                 className="reader-paragraph relative space-y-2 transition-opacity duration-200"
               >
-                <HighlightHandle paragraphIndex={idx} onOpen={handleOpenHighlightMenu} />
                 <p
                   className="reader-translated"
                   style={{ wordBreak: direction === "rtl" ? "normal" : "break-word" }}
                 >
-                  {p.translated}
+                  {marks && marks.length > 0
+                    ? renderHighlighted(p.translated, marks, handleMarkClick)
+                    : p.translated}
                 </p>
                 {showOriginal && p.original ? (
                   <p
@@ -301,9 +384,55 @@ export function ReaderBody({
       </article>
 
       <DefinitionPopover anchor={anchor} onClose={handleCloseAnchor} />
-      <HighlightMenu target={highlightTarget} onClose={handleCloseHighlightMenu} />
+      {toolbar ? (
+        <HighlightToolbar
+          mode={toolbar.mode}
+          rect={toolbar.rect}
+          activeColour={toolbar.mode === "edit" ? toolbar.highlight.colour : null}
+          note={toolbar.mode === "edit" ? toolbar.highlight.note : undefined}
+          onPickColour={handleToolbarPick}
+          onChangeNote={handleEditNote}
+          onRemove={handleEditRemove}
+          onClose={closeToolbar}
+        />
+      ) : null}
     </>
   );
+}
+
+/**
+ * Render a paragraph's text with its highlight ranges wrapped in `<mark>`.
+ * Marks are applied left-to-right; an overlapping range is clipped to start
+ * after the previous one so the output never double-wraps a character.
+ */
+function renderHighlighted(
+  text: string,
+  marks: Highlight[],
+  onMarkClick: (event: React.MouseEvent<HTMLElement>, highlight: Highlight) => void,
+): React.ReactNode {
+  const sorted = [...marks].sort((a, b) => a.startOffset - b.startOffset);
+  const nodes: React.ReactNode[] = [];
+  let cursor = 0;
+  for (const m of sorted) {
+    const start = Math.max(cursor, m.startOffset);
+    const end = Math.min(text.length, m.endOffset);
+    if (end <= start) continue; // out of range, or clipped by an earlier overlap
+    if (start > cursor) nodes.push(text.slice(cursor, start));
+    nodes.push(
+      <mark
+        key={m.id}
+        data-hl={m.id}
+        data-colour={m.colour}
+        className="reader-highlight"
+        onClick={(e) => onMarkClick(e, m)}
+      >
+        {text.slice(start, end)}
+      </mark>,
+    );
+    cursor = end;
+  }
+  if (cursor < text.length) nodes.push(text.slice(cursor));
+  return nodes;
 }
 
 /**

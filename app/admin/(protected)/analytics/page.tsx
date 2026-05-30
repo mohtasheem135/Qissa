@@ -12,6 +12,11 @@ import {
   type DailyTrendPoint,
   type TopErrorRow,
 } from "@/lib/analytics/translation-stats";
+import {
+  fetchAudioAnalytics,
+  type AudioProviderModelRow,
+  type AudioVoiceRow,
+} from "@/lib/analytics/audio-stats";
 import { AnalyticsRangeFilter } from "@/components/admin/AnalyticsRangeFilter";
 import { ProgressBar, Sparkline } from "@/components/admin/AnalyticsCharts";
 
@@ -25,7 +30,7 @@ interface PageProps {
 export default async function AnalyticsPage({ searchParams }: PageProps) {
   const { range: rawRange } = await searchParams;
   const range = parseRange(rawRange);
-  const data = await fetchAnalytics(range);
+  const [data, audio] = await Promise.all([fetchAnalytics(range), fetchAudioAnalytics(range)]);
 
   return (
     <div className="space-y-8">
@@ -92,7 +97,186 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
           <TopErrorsList rows={data.topErrors} />
         </div>
       </section>
+
+      {/* ---------------- Audio narration (TTS) ---------------- */}
+      <div className="border-t pt-8">
+        <header className="mb-6">
+          <h1 className="text-3xl font-semibold tracking-tight">Audio narration</h1>
+          <p className="text-muted-foreground mt-1 text-sm">
+            TTS model usage, characters synthesized, and estimated cost — sourced from{" "}
+            <code className="text-xs">tts_jobs</code>. {RANGE_LABELS[range]}.{" "}
+            <span className="text-amber-600 dark:text-amber-400">
+              Cost is a rough estimate — set real per-character rates in{" "}
+              <code className="text-xs">lib/analytics/pricing.ts</code>.
+            </span>
+          </p>
+        </header>
+
+        <section aria-label="Audio headline metrics" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <KpiCard
+            label="Synthesis runs"
+            value={audio.kpis.totalAttempts.toLocaleString()}
+            caption={`${audio.kpis.succeeded.toLocaleString()} ok · ${audio.kpis.failed.toLocaleString()} failed`}
+          />
+          <KpiCard
+            label="Success rate"
+            value={`${audio.kpis.successRatePct.toFixed(1)}%`}
+            caption="settled attempts only"
+          />
+          <KpiCard
+            label="Characters"
+            value={audio.kpis.totalCharacters.toLocaleString()}
+            caption="synthesized (billed)"
+          />
+          <KpiCard
+            label="Est. cost"
+            value={formatUsd(audio.kpis.totalCostUsd)}
+            caption="char-based · estimate"
+          />
+        </section>
+
+        <section className="mt-6">
+          <SectionHeading
+            title="Provider / model usage"
+            subtitle="Per-model runs, success rate, characters, latency, and estimated cost. Sorted by runs."
+          />
+          <AudioProviderModelTable rows={audio.byProviderModel} />
+        </section>
+
+        <section className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div>
+            <SectionHeading title="Voice usage" subtitle="Most-used voices in this range." />
+            <AudioVoiceList rows={audio.byVoice} />
+          </div>
+          <div>
+            <SectionHeading title="Top audio errors" subtitle="Most frequent TTS failures." />
+            <TopErrorsList rows={audio.topErrors} />
+          </div>
+        </section>
+      </div>
     </div>
+  );
+}
+
+function AudioProviderModelTable({ rows }: { rows: AudioProviderModelRow[] }) {
+  if (rows.length === 0) {
+    return (
+      <Card>
+        <CardContent className="text-muted-foreground py-6 text-sm">
+          No audio generated in this range.
+        </CardContent>
+      </Card>
+    );
+  }
+  return (
+    <Card>
+      <CardContent className="px-0">
+        <div className="hidden md:block">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-muted-foreground border-b text-xs uppercase">
+                <th className="px-4 py-2 text-left font-medium">Provider</th>
+                <th className="px-4 py-2 text-left font-medium">Model</th>
+                <th className="px-4 py-2 text-right font-medium">Runs</th>
+                <th className="px-4 py-2 text-left font-medium">Success</th>
+                <th className="px-4 py-2 text-right font-medium">Avg latency</th>
+                <th className="px-4 py-2 text-right font-medium">Characters</th>
+                <th className="px-4 py-2 text-right font-medium">Est. cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={`${r.provider}:${r.model}`} className="border-b last:border-b-0">
+                  <td className="px-4 py-3 align-middle">{r.provider}</td>
+                  <td className="text-muted-foreground px-4 py-3 align-middle font-mono text-xs">
+                    {r.model}
+                  </td>
+                  <td className="px-4 py-3 text-right align-middle tabular-nums">
+                    {r.attempts.toLocaleString()}
+                  </td>
+                  <td className="w-[160px] px-4 py-3 align-middle">
+                    <ProgressBar
+                      value={r.successRatePct}
+                      label={`${r.successRatePct.toFixed(0)}%`}
+                      tone={r.successRatePct >= 90 ? "success" : r.successRatePct >= 60 ? "warn" : "muted"}
+                    />
+                  </td>
+                  <td className="px-4 py-3 text-right align-middle tabular-nums">
+                    {r.avgDurationMs === 0 ? "—" : `${(r.avgDurationMs / 1000).toFixed(2)}s`}
+                  </td>
+                  <td className="text-muted-foreground px-4 py-3 text-right align-middle text-xs tabular-nums">
+                    {r.characters.toLocaleString()}
+                  </td>
+                  <td className="px-4 py-3 text-right align-middle tabular-nums">
+                    {formatUsd(r.costUsd)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <ul className="divide-y md:hidden">
+          {rows.map((r) => (
+            <li key={`m-${r.provider}:${r.model}`} className="space-y-2 px-4 py-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{r.provider}</p>
+                  <p className="text-muted-foreground truncate font-mono text-xs">{r.model}</p>
+                </div>
+                <span className="text-sm font-semibold tabular-nums">{formatUsd(r.costUsd)}</span>
+              </div>
+              <ProgressBar
+                value={r.successRatePct}
+                label={`${r.successRatePct.toFixed(0)}%`}
+                tone={r.successRatePct >= 90 ? "success" : r.successRatePct >= 60 ? "warn" : "muted"}
+              />
+              <div className="text-muted-foreground flex flex-wrap justify-between gap-x-3 text-xs tabular-nums">
+                <span>{r.attempts.toLocaleString()} runs</span>
+                <span>{r.avgDurationMs === 0 ? "—" : `${(r.avgDurationMs / 1000).toFixed(2)}s avg`}</span>
+                <span>{r.characters.toLocaleString()} chars</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AudioVoiceList({ rows }: { rows: AudioVoiceRow[] }) {
+  if (rows.length === 0) {
+    return (
+      <Card>
+        <CardContent className="text-muted-foreground py-6 text-sm">
+          No audio generated in this range.
+        </CardContent>
+      </Card>
+    );
+  }
+  const maxAttempts = Math.max(...rows.map((r) => r.attempts));
+  return (
+    <Card>
+      <CardContent className="px-0">
+        <ul className="divide-y">
+          {rows.map((r) => (
+            <li key={`${r.provider}:${r.voice}`} className="space-y-1.5 px-4 py-3">
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <span className="font-mono text-xs">
+                  {r.voice}
+                  <span className="text-muted-foreground ml-1">· {r.provider}</span>
+                </span>
+                <span className="tabular-nums">{r.attempts.toLocaleString()} runs</span>
+              </div>
+              <ProgressBar value={maxAttempts === 0 ? 0 : (r.attempts / maxAttempts) * 100} tone="muted" />
+              <p className="text-muted-foreground text-xs tabular-nums">
+                {r.characters.toLocaleString()} characters
+              </p>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }
 

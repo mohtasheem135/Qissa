@@ -11,6 +11,8 @@ import type { StoryMetadataInitialValue } from "@/components/admin/EditStoryMeta
 import type { VariantPanelData } from "@/components/admin/VariantPanel";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getConfiguredProviders, PROVIDERS } from "@/lib/ai/registry";
+import { getConfiguredTtsProviders, getVoicesForLanguage } from "@/lib/tts/registry";
+import { audioUrl } from "@/lib/r2/url";
 
 export const metadata: Metadata = {
   title: "Edit story",
@@ -53,11 +55,12 @@ export default async function StoryEditPage({ params }: PageProps) {
       .from("story_variants")
       .select(
         `id, slug, target_language, tone_id, title_translated, status, is_primary,
-         ai_provider, ai_model, total_words_translated,
+         ai_provider, ai_model, total_words_translated, tts_provider, tts_model, tts_voice_id,
          language:languages!inner ( name_english ),
          tone:tones!inner ( name ),
          translations:story_part_translations (
-           id, story_part_id, status, text, word_count, ai_provider, ai_model, error_message,
+           id, story_part_id, status, text, emotion_text, emotion_status, word_count, ai_provider, ai_model, error_message,
+           audio:story_part_audio ( status, audio_path, voice_id, error_message ),
            versions:story_part_versions (
              id, version_number, translated_text, provider_used, model_used, created_by, created_at
            )
@@ -110,6 +113,7 @@ export default async function StoryEditPage({ params }: PageProps) {
         .filter((t) => partById.has(t.story_part_id))
         .map<PartCardData>((t) => {
           const part = partById.get(t.story_part_id)!;
+          const audioRow = Array.isArray(t.audio) ? t.audio[0] : t.audio;
           return {
             partId: part.id,
             translationId: t.id,
@@ -117,12 +121,17 @@ export default async function StoryEditPage({ params }: PageProps) {
             part_label: part.part_label,
             text_original: part.text_original,
             text_translated: t.text,
+            emotion_text: t.emotion_text,
+            emotion_status: (t.emotion_status as PartCardData["emotion_status"]) ?? null,
             status: (t.status as PartStatus) ?? "pending",
             error_message: t.error_message,
             ai_provider: t.ai_provider,
             ai_model: t.ai_model,
             word_count_original: part.word_count_original,
             word_count_translated: t.word_count ?? 0,
+            audio_status: (audioRow?.status as PartCardData["audio_status"]) ?? "none",
+            audio_url: audioUrl(audioRow?.audio_path),
+            audio_error: audioRow?.error_message ?? null,
             versions: (t.versions ?? []).map((ver) => ({
               id: ver.id,
               version_number: ver.version_number,
@@ -136,6 +145,24 @@ export default async function StoryEditPage({ params }: PageProps) {
         })
         .sort((a, b) => a.part_number - b.part_number);
 
+      // TTS providers usable for this variant's language (configured + have a
+      // voice for the language — e.g. Sarvam is excluded for Urdu/Arabic).
+      const audioProviders = getConfiguredTtsProviders()
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          defaultModel: p.defaultModel,
+          models: p.models.map((m) => ({ id: m.id, name: m.name, defaultVoiceId: m.defaultVoiceId })),
+          voices: getVoicesForLanguage(p.id, v.target_language).map((vc) => ({
+            id: vc.id,
+            name: vc.name,
+            gender: vc.gender,
+            description: vc.description,
+            models: vc.models ? [...vc.models] : undefined,
+          })),
+        }))
+        .filter((p) => p.voices.length > 0);
+
       return {
         id: v.id,
         slug: v.slug,
@@ -148,6 +175,10 @@ export default async function StoryEditPage({ params }: PageProps) {
         ai_provider: v.ai_provider,
         ai_model: v.ai_model,
         total_words_translated: v.total_words_translated,
+        tts_provider: v.tts_provider,
+        tts_model: v.tts_model,
+        tts_voice_id: v.tts_voice_id,
+        audioProviders,
         parts: translations,
       };
     })

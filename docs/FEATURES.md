@@ -91,14 +91,15 @@ Source of truth for **what** features should exist: [01-requirements.md](./01-re
 - **UX:** newest-first list; each row links back to the reader page where the word was tapped (if context was captured) and to the Wiktionary entry; trash button removes
 - **Discoverable from:** the `/bookmarks` page header surfaces "My words (N)" link
 
-### Per-paragraph highlights
+### Text-selection highlights
 - **URL:** any reader page (variant + source)
-- **Trigger:** tap the small dot in the start margin of any paragraph ([HighlightHandle](../components/reader/HighlightHandle.tsx)) — opens the [HighlightMenu](../components/reader/HighlightMenu.tsx) anchored to the handle
-- **Colours:** yellow · green · blue. Tapping a swatch saves immediately; the popover stays open so the reader can add a note. Translucent backgrounds (`rgba(…, 0.22)`) read across all 5 themes including Night and Focus — see [globals.css](../app/globals.css)
-- **Note (optional):** plain text, persisted on blur. Pick a colour first; the textarea is disabled until then so a colourless highlight never lands
-- **Visual:** the highlighted paragraph's translated text gets the colour tint + a small inline-margin pill; the margin handle stays pinned in the saved colour so highlighted paragraphs are visible at a glance while scrolling
+- **Trigger:** select text while reading (mouse drag on desktop, long-press on mobile) — a small floating colour bar ([HighlightToolbar](../components/reader/HighlightToolbar.tsx)) appears above the selection. The live selection is read via [getSelectionSegments](../lib/reader/selection.ts)
+- **Colours:** yellow · green · blue. Tapping a swatch tints only the selected words and clears the selection. A selection spanning multiple paragraphs creates one highlight per paragraph it touches
+- **Edit:** tap an existing highlight (`<mark>`) to reopen the toolbar in edit mode — change colour, add/edit a note (persisted on blur), or remove
+- **Note (optional):** plain text on a highlight, edited in the popover
+- **Visual:** each stored range renders as a `<mark class="reader-highlight" data-colour=…>` in the translated text; translucent per-colour backgrounds (~0.34–0.38 alpha) read across all 5 themes including Night and Focus — see [globals.css](../app/globals.css)
 - **Source reader supported:** unlike tap-to-define, highlights work in the source reader too (no language dependency)
-- **Storage:** [lib/reader/highlights.ts](../lib/reader/highlights.ts) — `qissa:highlights` array of `{ id, storyId, variantSlug, partNumber, paragraphIndex, colour, snippet, note?, createdAt }`. Cross-tab sync via the same pattern as bookmarks/vocab
+- **Storage:** [lib/reader/highlights.ts](../lib/reader/highlights.ts) — `qissa:highlights` array of `{ id, storyId, variantSlug, partNumber, paragraphIndex, startOffset, endOffset, colour, snippet, note?, createdAt }`. `addHighlight` appends a range, `updateHighlight` patches colour/note, `removeHighlight` deletes; cross-tab sync via the same pattern as bookmarks/vocab
 - **Doc:** [UI/reader.md](./UI/reader.md) · [INTERNALS/reader-state.md](./INTERNALS/reader-state.md)
 
 ### Highlights index
@@ -112,9 +113,26 @@ Source of truth for **what** features should exist: [01-requirements.md](./01-re
 - **Used on:** story landing + reader top bar
 - **API:** Web Share API with clipboard fallback
 
+### Listen to this page (audio narration)
+- **Control:** [ListenButton](../components/reader/ListenButton.tsx) in the reader top bar (right of the variant picker)
+- **Stored audio:** plays the admin-generated R2 MP3 (play/pause/seek + speed) when present
+- **Free fallback:** the device's Web Speech API ([lib/reader/speech.ts](../lib/reader/speech.ts)) narrates in the variant's language when there's no stored audio — so Listen always works
+- **Data:** the part page fetches the completed [`story_part_audio`](./04-database.md#416-story_part_audio) row; URL composed by [audioUrl()](../lib/r2/url.ts)
+- **Offline:** premium audio replays from the SW cache after one play
+- **Scope:** variant readers only (source reader has no tracked language — deferred)
+- **Doc:** [UI/reader.md](./UI/reader.md) · [INTERNALS/tts-provider-adapter.md](./INTERNALS/tts-provider-adapter.md)
+
+### Choose narration voice (Web Speech)
+- **Where:** reader settings dialog → "Narration voice" section ([ReaderSettings](../components/reader/ReaderSettings.tsx))
+- **What:** a per-language Select of the device's installed voices for the variant's language ([listVoicesForLanguage()](../lib/reader/speech.ts)) + "Auto (default)", refreshed on `voiceschanged`
+- **Storage:** `settings.narrationVoiceByLang[langCode] = voiceURI` in `qissa:reader-settings` ([reader-settings.ts](../lib/reader/reader-settings.ts)); back-compat via the existing defaults merge
+- **Threading:** [ReaderShell](../components/reader/ReaderShell.tsx) → [ReaderChrome](../components/reader/ReaderChrome.tsx) → [ListenButton](../components/reader/ListenButton.tsx) → `createSpeechController(..., voiceURI)`; `pickVoice` honours the saved URI if it still exists
+- **Scope:** the **free** Web Speech fallback only — stored studio audio is unaffected
+- **Doc:** [UI/reader.md](./UI/reader.md) · [INTERNALS/reader-state.md](./INTERNALS/reader-state.md)
+
 ### Offline support
 - **Service worker:** [public/sw.js](../public/sw.js) — registered by [ServiceWorkerRegistration](../components/shared/ServiceWorkerRegistration.tsx) in production only
-- **Strategies:** network-first HTML / cache-first images / SWR static / network-only admin+API
+- **Strategies:** network-first HTML / cache-first images + audio / SWR static / network-only admin+API
 - **Fallback page:** [app/(public)/offline/page.tsx](../app/(public)/offline/page.tsx)
 - **Doc:** [INTERNALS/pwa-service-worker.md](./INTERNALS/pwa-service-worker.md)
 
@@ -158,11 +176,18 @@ Source of truth for **what** features should exist: [01-requirements.md](./01-re
 ### Admin analytics
 - **URL:** `/admin/analytics` (URL-driven range: `?range=7d|30d|90d|all`, default `30d`)
 - **Page:** [app/admin/(protected)/analytics/page.tsx](../app/admin/(protected)/analytics/page.tsx)
-- **Queries:** [lib/analytics/translation-stats.ts](../lib/analytics/translation-stats.ts) (server-only) + [lib/analytics/translation-stats.types.ts](../lib/analytics/translation-stats.types.ts) (client-safe types)
-- **Pricing:** [lib/analytics/pricing.ts](../lib/analytics/pricing.ts) — editable per-1M-token table keyed by `<provider>:<model>`
+- **Queries:** [lib/analytics/translation-stats.ts](../lib/analytics/translation-stats.ts) + [lib/analytics/audio-stats.ts](../lib/analytics/audio-stats.ts) (server-only) + [lib/analytics/translation-stats.types.ts](../lib/analytics/translation-stats.types.ts) (client-safe types, shared `RangeKey`)
+- **Pricing:** [lib/analytics/pricing.ts](../lib/analytics/pricing.ts) — editable per-1M-token table (`<provider>:<model>`) + per-1M-char TTS table `TTS_PRICES_PER_MILLION_CHARS`
 - **Sections:** KPIs (attempts · success rate · avg latency · est. cost) · daily activity sparkline · cost trend sparkline · provider/model breakdown (desktop table + mobile cards) · admin override rate per model (quality signal) · top errors with last-seen
 - **Data sources:** `translation_jobs` (per-attempt log: tokens, latency, provider, model, status, error) + `story_part_versions` (`created_by ∈ {ai, admin}` drives override rate)
 - **Charts:** inline SVG [Sparkline](../components/admin/AnalyticsCharts.tsx) + [ProgressBar](../components/admin/AnalyticsCharts.tsx) — no chart library dependency
+- **Doc:** [UI/admin.md](./UI/admin.md)
+
+### Audio-model usage analytics (cost + characters per model/voice)
+- **Where:** the **Audio narration** section of `/admin/analytics`, below the translation one (same range filter)
+- **Query:** [lib/analytics/audio-stats.ts](../lib/analytics/audio-stats.ts) `fetchAudioAnalytics(range)` — reads `tts_jobs` (provider, `tts_model`, voice, status, characters, latency, error), capped at 10k rows
+- **Sections:** KPIs (runs · success rate · characters · avg latency · est. cost) · provider/model usage table · voice usage list · top audio errors
+- **Pricing:** char-based (TTS bills by characters, not tokens) — [pricing.ts](../lib/analytics/pricing.ts) `estimateTtsCost(provider, model, characters)` vs `TTS_PRICES_PER_MILLION_CHARS` (key `"<provider>:<model>"`, e.g. `"sarvam:bulbul:v3"`) — rough placeholder rates the admin should edit
 - **Doc:** [UI/admin.md](./UI/admin.md)
 
 ### Categories CRUD
@@ -202,6 +227,38 @@ Source of truth for **what** features should exist: [01-requirements.md](./01-re
 - **Test Connection:** [/api/ai/test](../app/api/ai/test/route.ts) — sends a real Premchand-style Hindi translation as the test prompt
 - **Doc:** [UI/admin.md](./UI/admin.md) · [API/ai-test.md](./API/ai-test.md)
 
+### TTS / Voices config
+- **URL:** `/admin/tts-config`
+- **Page:** [app/admin/(protected)/tts-config/page.tsx](../app/admin/(protected)/tts-config/page.tsx)
+- **Form:** [TtsConfigForm](../components/admin/TtsConfigForm.tsx) — Provider · **Model** · Voice selects (voice scoped to model)
+- **Action:** [lib/actions/tts-config.ts](../lib/actions/tts-config.ts) → updates the pinned `tts_config` singleton (`default_tts_provider` + `default_tts_model` + `default_voice_id`)
+- **Providers/voices:** [lib/tts/registry.ts](../lib/tts/registry.ts) — Sarvam + ElevenLabs; unconfigured providers disabled with "missing ENV_KEY" hint
+- **Test Connection:** [/api/tts/test](../app/api/tts/test/route.ts) — synthesizes a short sample and plays it inline
+- **Sidebar entry:** [SidebarNav](../components/admin/SidebarNav.tsx) "TTS / Voices"
+- **Doc:** [UI/admin.md](./UI/admin.md) · [API/tts.md](./API/tts.md) · [INTERNALS/tts-provider-adapter.md](./INTERNALS/tts-provider-adapter.md)
+
+### Choose TTS model (Sarvam v2/v3, ElevenLabs variants)
+- **What:** each provider exposes a **list** of synthesis engines; the admin picks a global default in `/tts-config` and can override per variant (mirrors provider/voice). Voices are **model-specific** — Sarvam `bulbul:v3` (audiobook, 36 voices) and `bulbul:v2` (legacy, 7 voices) have entirely different speakers, so the voice picker is scoped to the chosen model everywhere; ElevenLabs models (`eleven_multilingual_v2` default, `eleven_turbo_v2_5`, `eleven_flash_v2_5`) are model-agnostic
+- **Registry:** [lib/tts/registry.ts](../lib/tts/registry.ts) — `TtsModel`, `TTS_PROVIDERS[].models`/`defaultModel`, `getVoicesForLanguage(provider, lang, model?)`, resolvers `getTtsModelMeta`/`resolveTtsModel`/`resolveTtsVoice`
+- **Resolution (synthesis):** [runStoryPartAudio](../lib/tts/run-part.ts) picks model = explicit override > `variant.tts_model` > `tts_config.default_tts_model` > provider default, then the voice **scoped to that model**; writes `tts_model` to [`story_part_audio`](./04-database.md#416-story_part_audio) + [`tts_jobs`](./04-database.md#417-tts_jobs)
+- **Persistence:** `tts_config.default_tts_model` + `story_variants.tts_model` ([migration](../supabase/migrations/20260530150000_tts_model_selection.sql)); `model` accepted by [/api/tts](../app/api/tts/route.ts), [/api/tts/queue](../app/api/tts/queue/route.ts), [/api/tts/test](../app/api/tts/test/route.ts)
+- **Doc:** [INTERNALS/tts-provider-adapter.md](./INTERNALS/tts-provider-adapter.md) · [API/tts.md](./API/tts.md) · [UI/admin.md](./UI/admin.md)
+
+### Per-variant audio generation
+- **Where:** the Audio section in each [VariantPanel](../components/admin/VariantPanel.tsx) (provider + **model** + voice picker — model shown only when a provider has >1, voice scoped to model — "Generate audio (N)" → SSE queue, Cancel) + per-part Generate/Re-generate + ▶ preview in [PartCard](../components/admin/PartCard.tsx)
+- **API:** [/api/tts](../app/api/tts/route.ts) (single) · [/api/tts/queue](../app/api/tts/queue/route.ts) (SSE)
+- **Core:** [lib/tts/run-part.ts](../lib/tts/run-part.ts) — `runStoryPartAudio(translationId)`; stores to R2, rows in [`story_part_audio`](./04-database.md#416-story_part_audio)
+- **Voice persistence:** [setVariantVoice](../lib/actions/story-variants.ts)`(id, provider, model, voiceId)` writes `story_variants.tts_provider` + `tts_model` + `tts_voice_id`
+- **Doc:** [UI/admin.md](./UI/admin.md) · [API/tts.md](./API/tts.md)
+
+### Emotion narration script (expressive TTS)
+- **What:** a second per-translation script (`story_part_translations.emotion_text`) that audio narrates instead of the clean reading `text` — emotion via punctuation/pacing + `<break time="…"/>` tags only, never read aloud. Keeps the reading translation byte-for-byte identical
+- **Prompt:** [lib/ai/prompt-builder.ts](../lib/ai/prompt-builder.ts) narration-director branch, selected by `TranslationInput.task === "narrate"`; [narrate()](../lib/ai/translate.ts) wraps `translate()` with zero provider changes
+- **Generation:** [runStoryPartNarration()](../lib/translation/run-narration.ts) — lazy (run by [runStoryPartAudio](../lib/tts/run-part.ts) when `emotion_text` is empty, or via the admin [generateNarration](../lib/actions/story-parts.ts) action). Audio falls back to plain `text` if the script is empty/failed — never blocks
+- **Admin UI:** [PartCard](../components/admin/PartCard.tsx) "Reading | Narration" segmented toggle (each column autosaves on blur) + "Generate narration script" button + status badge (generating/ready/failed)
+- **Schema:** `emotion_text` + `emotion_status` on [`story_part_translations`](./04-database.md#411-story_part_translations) ([migration](../supabase/migrations/20260530130000_emotion_narration.sql)); **not versioned** in v1 (future work)
+- **Doc:** [INTERNALS/tts-provider-adapter.md](./INTERNALS/tts-provider-adapter.md) · [INTERNALS/ai-provider-adapter.md](./INTERNALS/ai-provider-adapter.md) · [UI/admin.md](./UI/admin.md)
+
 ### Story listing
 - **URL:** `/admin/stories`
 - **Page:** [app/admin/(protected)/stories/page.tsx](../app/admin/(protected)/stories/page.tsx)
@@ -216,8 +273,14 @@ Source of truth for **what** features should exist: [01-requirements.md](./01-re
 - **Form:** [StoryForm](../components/admin/StoryForm.tsx) — single dense form (no wizard)
 - **Cascades:** category → subcategory, language → tone, provider → model
 - **Cover upload:** [ImageUploadField](../components/admin/ImageUploadField.tsx) → `/api/upload` returns path
-- **Parts entry:** manual rows OR [BulkImportDialog](../components/admin/BulkImportDialog.tsx) (separator default `---`, live preview)
+- **Parts entry:** manual rows OR [BulkImportDialog](../components/admin/BulkImportDialog.tsx) — **By separator** (default `---`) or **Auto-split** mode, both with live preview
 - **Action:** [createStory](../lib/actions/stories.ts) — atomic story+parts insert with rollback on parts failure
+- **Doc:** [UI/admin.md](./UI/admin.md)
+
+### Smart auto-split (story creation)
+- **Where:** [BulkImportDialog](../components/admin/BulkImportDialog.tsx) "Auto-split" mode — a "Target words per part" input (default 800) + live per-part word-count preview
+- **Core:** [smartSplit(text, { targetWords })](../lib/stories/smart-split.ts) — splits paragraphs ([splitParagraphs](../lib/reader/paragraphs.ts)), pre-splits any oversized paragraph on sentence boundaries (same Latin + Devanagari danda regex as [lib/tts/chunk.ts](../lib/tts/chunk.ts)), greedily packs into near-equal parts, merges a runt trailing part. Never breaks mid-sentence → TTS-smooth
+- **Flow:** reuses the existing `onImport(parts)` callback into [StoryForm](../components/admin/StoryForm.tsx) + [createStory](../lib/actions/stories.ts); no schema/action changes. **Creation-only** (an "append to existing story" tool could reuse `smartSplit` later)
 - **Doc:** [UI/admin.md](./UI/admin.md)
 
 ### Edit story (source + variants + translation)

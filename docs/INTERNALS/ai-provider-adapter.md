@@ -47,6 +47,7 @@ interface TranslationProvider {
 - `customInstructions?` (per-story extra guidance)
 - `previousPartContext?` (last 1500 chars of the previous part's translation)
 - `glossary?` (manual list of `{ original, translated }` — Phase 1.5)
+- `task?: "translate" | "narrate"` (default `"translate"`) — selects which prompt the prompt-builder emits. `"narrate"` reuses the **same** providers + retry, only swapping the prompt (see "Narration script" below)
 
 `TranslationOutput`:
 
@@ -74,6 +75,10 @@ Sections appended in order:
 7. OUTPUT RULES — paragraph preservation, no commentary, no original text
 
 OUTPUT RULES go LAST so the model sees the formatting constraints right before the user text. This is intentional — order matters for instruction-tuned models.
+
+### Narration branch (`task === "narrate"`)
+
+When `input.task === "narrate"`, `buildTranslationPrompt` returns a **narration-director** prompt instead. The user text is the already-translated part; the system brief tells the model to rewrite it into an expressive TTS script in the *same* language — **not** to translate, summarize, or add bracketed stage directions. Emotion is carried only by punctuation/pacing (ellipses, em-dashes, paragraph breaks) and `<break time="…"/>` pause tags — the only markup allowed, and one that Sarvam `bulbul:v2` + ElevenLabs `multilingual_v2` honour silently. The translation branch is **byte-for-byte unchanged**, so the reading output is identical and text-only variants pay no narration tokens.
 
 ---
 
@@ -128,6 +133,8 @@ export async function translate(
 ```
 
 Composes `getProvider + withRetry`. This is what [lib/translation/run-part.ts](../../lib/translation/run-part.ts) calls.
+
+A thin sibling `narrate(providerId, input, options)` is just `translate(providerId, { ...input, task: "narrate" }, options)` — same `getProvider` + `withRetry` + every provider's `translate()`, **zero** provider changes. Called by [lib/translation/run-narration.ts](../../lib/translation/run-narration.ts) to produce a part's `emotion_text`. See [tts-provider-adapter.md](./tts-provider-adapter.md) for the audio side.
 
 ---
 

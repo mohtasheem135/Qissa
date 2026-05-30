@@ -4,6 +4,7 @@ import { ReaderShell } from "@/components/reader/ReaderShell";
 import type { VariantOption } from "@/components/reader/ReaderChrome";
 import { createClient } from "@/lib/supabase/server";
 import { googleFontsUrlForLanguage } from "@/lib/reader/google-fonts";
+import { audioUrl } from "@/lib/r2/url";
 
 export const revalidate = 60;
 
@@ -58,7 +59,9 @@ export default async function ReaderPage({ params }: PageProps) {
   const { data: translation, error: trErr } = await supabase
     .from("story_part_translations")
     .select(
-      `text, part:story_parts!inner ( id, part_number, part_label, text_original )`,
+      `text,
+       audio:story_part_audio ( status, audio_path ),
+       part:story_parts!inner ( id, part_number, part_label, text_original )`,
     )
     .eq("variant_id", variant.id)
     .eq("part.story_id", storyId)
@@ -71,6 +74,11 @@ export default async function ReaderPage({ params }: PageProps) {
   const original = translation.part.text_original ?? "";
   const body = translated.length > 0 ? translated : original;
   if (!body) notFound();
+
+  // Premium audio for this part, if the admin has generated it (RLS: published).
+  const audioRow = Array.isArray(translation.audio) ? translation.audio[0] : translation.audio;
+  const partAudioUrl =
+    audioRow?.status === "completed" ? audioUrl(audioRow.audio_path) : null;
 
   // 3) Sibling variants for the picker chip.
   const { data: siblings } = await supabase
@@ -124,6 +132,7 @@ export default async function ReaderPage({ params }: PageProps) {
           partLabel: translation.part.part_label ?? `Part ${translation.part.part_number}`,
           textOriginal: original,
           textTranslated: body,
+          audioUrl: partAudioUrl,
         }}
         prevHref={prevHref}
         nextHref={nextHref}

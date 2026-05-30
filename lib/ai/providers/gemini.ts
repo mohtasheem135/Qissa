@@ -53,10 +53,32 @@ export class GeminiProvider implements TranslationProvider {
 
       const text = (response.text ?? "").trim();
       if (!text) {
+        // An empty candidate has several distinct causes — surface which one so
+        // failures are diagnosable instead of an opaque "empty response":
+        //   - promptFeedback.blockReason → the PROMPT was blocked outright.
+        //   - finishReason RECITATION    → Gemini refused to echo text it
+        //     recognises as near-verbatim training data (common when asked to
+        //     reproduce a classic/public-domain text, e.g. the narration task).
+        //   - finishReason SAFETY        → the output tripped a safety filter.
+        //   - finishReason MAX_TOKENS    → ran out of output budget (retryable).
+        const candidate = response.candidates?.[0];
+        const finishReason = candidate?.finishReason
+          ? String(candidate.finishReason)
+          : undefined;
+        const blockReason = response.promptFeedback?.blockReason
+          ? String(response.promptFeedback.blockReason)
+          : undefined;
+        const detail = blockReason
+          ? `prompt blocked (${blockReason})`
+          : finishReason
+            ? `finishReason=${finishReason}`
+            : "no text in candidate";
         throw new ProviderError({
-          message: "Gemini returned an empty response",
+          message: `Gemini returned an empty response — ${detail}`,
           providerId: PROVIDER_ID,
-          isRetryable: true,
+          // RECITATION / SAFETY / a blocked prompt won't change on retry; only
+          // a token-budget miss (or a truly unknown empty) is worth retrying.
+          isRetryable: finishReason === "MAX_TOKENS" || (!finishReason && !blockReason),
         });
       }
 

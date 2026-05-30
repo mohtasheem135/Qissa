@@ -82,6 +82,40 @@ export function estimateJobCost(
   return inCost + outCost;
 }
 
+/**
+ * Approximate USD pricing per **1 million characters** for TTS models. TTS
+ * bills by characters synthesized (logged in `tts_jobs.characters`), not tokens.
+ *
+ * ⚠️ These are ROUGH PLACEHOLDER ESTIMATES — TTS pricing varies a lot by plan
+ * and changes often. Edit these to your actual contracted rates so the audio
+ * analytics cost column is meaningful. Key shape: `"<provider>:<model>"`,
+ * lowercased (note Sarvam models contain a colon → e.g. "sarvam:bulbul:v3").
+ * Unlisted pairs fall back to 0 (uncosted).
+ */
+const TTS_PRICES_PER_MILLION_CHARS: Record<string, number> = {
+  "sarvam:bulbul:v3": 60,
+  "sarvam:bulbul:v2": 60,
+  "elevenlabs:eleven_multilingual_v2": 180,
+  "elevenlabs:eleven_turbo_v2_5": 100,
+  "elevenlabs:eleven_flash_v2_5": 100,
+};
+
+/** USD per 1M characters for a (provider, model) TTS pair; 0 if unknown. */
+export function getTtsCharPrice(provider: string | null, model: string | null): number {
+  if (!provider || !model) return 0;
+  const key = `${provider.toLowerCase()}:${model.toLowerCase()}`;
+  return TTS_PRICES_PER_MILLION_CHARS[key] ?? 0;
+}
+
+/** Estimated USD cost of synthesizing `characters` with a (provider, model). */
+export function estimateTtsCost(
+  provider: string | null,
+  model: string | null,
+  characters: number | null | undefined,
+): number {
+  return ((characters ?? 0) / 1_000_000) * getTtsCharPrice(provider, model);
+}
+
 /** Formatter for the dashboard — fixed 4dp under a cent, 2dp otherwise. */
 export function formatUsd(amount: number): string {
   if (amount === 0) return "$0";
