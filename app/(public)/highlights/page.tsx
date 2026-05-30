@@ -5,6 +5,7 @@ import { useMemo, useSyncExternalStore } from "react";
 import { Trash2Icon } from "lucide-react";
 import {
   getHighlights,
+  getServerHighlights,
   removeHighlight,
   subscribeHighlights,
   type Highlight,
@@ -28,7 +29,7 @@ export default function HighlightsPage() {
   const highlights = useSyncExternalStore(
     subscribeHighlights,
     getHighlights,
-    getHighlights,
+    getServerHighlights,
   );
 
   // Newest first.

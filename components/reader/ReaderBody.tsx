@@ -16,6 +16,7 @@ import { HighlightToolbar } from "./HighlightToolbar";
 import {
   addHighlight,
   getHighlights,
+  getServerHighlights,
   removeHighlight,
   subscribeHighlights,
   updateHighlight,
@@ -111,7 +112,7 @@ export function ReaderBody({
   const allHighlights = useSyncExternalStore(
     subscribeHighlights,
     getHighlights,
-    getHighlights,
+    getServerHighlights,
   );
   const paragraphHighlights = useMemo(() => {
     const map = new Map<number, Highlight[]>();
