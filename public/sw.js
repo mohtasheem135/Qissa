@@ -12,7 +12,7 @@
  * The `activate` handler deletes caches that don't start with this prefix.
  */
 
-const CACHE_VERSION = "qissa-v4";
+const CACHE_VERSION = "qissa-v5";
 const HTML_CACHE = `${CACHE_VERSION}-html`;
 const IMAGE_CACHE = `${CACHE_VERSION}-images`;
 const AUDIO_CACHE = `${CACHE_VERSION}-audio`;
@@ -125,21 +125,13 @@ async function handleAudio(request) {
   const cached = await cache.match(request.url);
   if (cached) return cached;
   try {
-    // Prefer a real CORS fetch: when the R2 bucket's CORS policy allows this
-    // origin we get a transparent, verifiable response (so a 404 isn't cached
-    // as if valid) that the player can seek. Fall back to a no-cors OPAQUE copy
-    // only when CORS is blocked (e.g. an origin not in the bucket policy) so
-    // playback still works there. Either way we fetch from the URL string,
-    // dropping the Range header, so a full replayable copy lands in the cache
-    // (media elements accept a 200 full body for a Range request).
-    let fresh;
-    try {
-      fresh = await fetch(request.url, { mode: "cors" });
-    } catch {
-      fresh = await fetch(request.url, { mode: "no-cors" });
-    }
-    // Cache a verified CORS 200, or an opaque copy (status 0 / ok=false).
-    if (fresh && (fresh.ok || fresh.type === "opaque")) {
+    // The R2 bucket's CORS policy allows our origins, so an ordinary (cors)
+    // fetch of the full file succeeds and gives a transparent, verifiable,
+    // seekable response. Fetch from the URL string so the Range header is
+    // dropped and a full, replayable copy lands in the cache — media elements
+    // accept a 200 full body even when they sent a Range request.
+    const fresh = await fetch(request.url);
+    if (fresh.ok) {
       cache.put(request.url, fresh.clone()).catch(() => {});
     }
     return fresh;
