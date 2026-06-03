@@ -334,17 +334,30 @@ function storyHref(story: StoryCardData, resume: LastRead | null) {
     : `/s/${story.id}`;
 }
 
-/** Prominent "Continue" chip — marks the card the reader last left off in. */
+/**
+ * Prominent "Continue" chip — marks the card the reader last left off in.
+ * Visual styling is inline (not Tailwind classes) on purpose: the badge must
+ * render its gold pill identically everywhere, with zero dependency on theme
+ * CSS-variable resolution, class purging, or class-merge edge cases. Only
+ * positioning/layout stays in `className`.
+ */
 function ResumeBadge({ compact, className }: { compact?: boolean; className?: string }) {
   return (
     <span
-      className={cn(
-        "bg-brand text-brand-foreground inline-flex items-center justify-center gap-1 font-bold uppercase shadow-md ring-1 ring-black/15",
-        compact
-          ? "size-5 rounded-full"
-          : "rounded-full px-2.5 py-1 text-[11px] tracking-wide",
-        className,
-      )}
+      className={cn("inline-flex items-center justify-center gap-1", className)}
+      style={{
+        backgroundColor: "hsl(38 82% 52%)", // brand gold
+        color: "hsl(30 35% 10%)", // near-black ink
+        borderRadius: 9999,
+        padding: compact ? 4 : "4px 10px",
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: "0.04em",
+        lineHeight: 1,
+        textTransform: "uppercase",
+        boxShadow: "0 1px 4px rgba(0,0,0,0.35)",
+        whiteSpace: "nowrap",
+      }}
     >
       <PlayIcon />
       {compact ? null : "Continue"}
@@ -354,7 +367,12 @@ function ResumeBadge({ compact, className }: { compact?: boolean; className?: st
 
 function PlayIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="size-3 shrink-0" fill="currentColor" aria-hidden>
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden
+      style={{ width: 11, height: 11, flexShrink: 0 }}
+    >
       <path d="M8 5v14l11-7z" />
     </svg>
   );
