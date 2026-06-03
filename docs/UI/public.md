@@ -10,12 +10,12 @@ All under [app/(public)/](../../app/(public)/). Mobile-first; shell defined by [
 
 Sections, top to bottom:
 
-1. **Hero** — title + tagline + [SearchBar](../../components/shared/SearchBar.tsx)
-2. **Continue reading** — [ContinueReading](../../components/shared/ContinueReading.tsx) Client Component; reads `qissa:last-read`, fetches the story via the browser Supabase client, renders one [StoryCard](../../components/shared/StoryCard.tsx) + Resume link. Renders nothing if no last-read.
-3. **Recently published** — 8 latest from `stories` ordered by `published_at desc`
-4. **Browse by category** — active categories with story counts; de-dup'd from the embedded `subcategories(stories(id))` join
+1. **Continue reading** — [ContinueReading](../../components/shared/ContinueReading.tsx) Client Component; reads `qissa:last-read`, fetches the story via the browser Supabase client, renders one [StoryCard](../../components/shared/StoryCard.tsx) + Resume link. Renders nothing if no last-read.
+2. **Story browser** — [StoryBrowser](../../components/shared/StoryBrowser.tsx) Client Component. A filter bar (**category → subcategory → language**, plus a **grid/list layout toggle**, grid by default) that sticks just below the navbar (`top-14`), over an **infinite-scroll** list showing just the cover, title, and reading time per story. Page 0 is server-rendered; the browser Supabase client lazy-loads later pages and re-runs every filter change via `fetchStoryCards()` (RLS-gated to published content). The page passes down: the first page of cards, the categories→subcategories tree, and the active languages — the last two are built from `!inner` joins so the filter bar only offers options that have published stories.
 
-Shared query shape lives in [lib/reader/story-cards.ts](../../lib/reader/story-cards.ts) (`STORY_CARD_COLUMNS` + `toStoryCard()`) — every listing page uses it.
+There is **no hero banner** — the page opens straight into Continue reading + the browser. Search lives in the top-nav `Search` link / `/search`.
+
+Shared query shape lives in [lib/reader/story-cards.ts](../../lib/reader/story-cards.ts) (`STORY_CARD_COLUMNS` + `toStoryCard()`); the home page's filtered, paginated fetch is `fetchStoryCards(supabase, { filter, page })` in the same file (`STORY_PAGE_SIZE = 24`). Filtering by language narrows the embedded `variants` `!inner` join via `variants.target_language`; filtering by category/subcategory resolves to a `subcategory_id IN (…)` list. Every other listing page uses `STORY_CARD_COLUMNS` + `toStoryCard()` directly.
 
 ---
 

@@ -222,9 +222,18 @@ export const STORY_CARD_COLUMNS = `id, title_original, title_translated, cover_i
   tone:tones!inner ( name )` as const;
 
 export function toStoryCard(row: ...): StoryCardData;
+
+// Home-page filtered + paginated fetch (works with the server OR browser client).
+export const STORY_PAGE_SIZE = 24;
+export interface StoryCardFilter { subcategoryIds?: string[] | null; language?: string | null }
+export function fetchStoryCards(
+  supabase, { filter, page },
+): Promise<{ cards: StoryCardData[]; hasMore: boolean }>;
 ```
 
 Every public listing page (home, subcategory, search, bookmarks) uses this constant + mapping. Adding a column to cards = touch one file.
+
+`fetchStoryCards()` wraps the same columns with `.order('published_at', desc).range()` plus optional filters: `subcategoryIds` → `subcategory_id IN (…)`; `language` → `variants.target_language` on the embedded `!inner` join. The home page's [StoryBrowser](../../components/shared/StoryBrowser.tsx) calls it from the browser client for infinite scroll and filter changes; `hasMore` is "got a full page back".
 
 ---
 

@@ -11,8 +11,9 @@ Source of truth for **what** features should exist: [01-requirements.md](./01-re
 ### Browse home page
 - **URL:** `/`
 - **Page:** [app/(public)/page.tsx](../app/(public)/page.tsx)
-- **Components:** [SearchBar](../components/shared/SearchBar.tsx) · [ContinueReading](../components/shared/ContinueReading.tsx) · [StoryCard](../components/shared/StoryCard.tsx) · [CategoryTile](../components/shared/CategoryTile.tsx)
-- **Data:** 8 latest published stories + active categories with story counts
+- **Components:** [ContinueReading](../components/shared/ContinueReading.tsx) · [StoryBrowser](../components/shared/StoryBrowser.tsx) (no hero banner — search lives in the nav)
+- **Layout:** sticky filter bar (category → subcategory → language) + grid/list toggle (grid default) over an **infinite-scroll** list; each item shows cover · title · reading time only
+- **Data:** server-renders page 0 of stories + the categories→subcategories tree + active languages (filter options built from `!inner` joins so they only list options with published stories); the browser client lazy-loads later pages & re-filters via `fetchStoryCards()` ([lib/reader/story-cards.ts](../lib/reader/story-cards.ts), `STORY_PAGE_SIZE = 24`)
 - **Doc:** [UI/public.md](./UI/public.md)
 
 ### Continue reading

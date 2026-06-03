@@ -50,10 +50,12 @@ POST /api/ai/test                ─ Test connection            app/api/ai/test/
 
 ### Root: [app/layout.tsx](../../app/layout.tsx)
 
-- Loads Inter (`--font-sans`) and Lora (`--font-serif`) via `next/font`
+- Loads **Plus Jakarta Sans** (`--font-sans`, the modern clean UI face) and **Lora** (`--font-serif`, reader body + brand wordmark) via `next/font`
 - Mounts [ServiceWorkerRegistration](../../components/shared/ServiceWorkerRegistration.tsx) + [InstallPrompt](../../components/shared/InstallPrompt.tsx) + sonner `<Toaster />`
 - Sets `metadataBase` from `NEXT_PUBLIC_APP_URL`; ships OpenGraph + Twitter + appleWebApp metadata
-- Sets viewport `themeColor: "#4F46E5"` and allows pinch-zoom (`userScalable: true`) — the reader uses it
+- Sets viewport `themeColor: "#f5d399"` (the brand gold) and allows pinch-zoom (`userScalable: true`) — the reader uses it
+
+**Design tokens** ([app/globals.css](../../app/globals.css)): a warm **"paper & ink"** palette derived from the brand — gold `#f5d399` and near-black ink `#0c0a05`. Neutrals are warm-tinted (not cool slate); the amber `--brand` / `--color-brand` token carries the identity (active nav underline, layout-toggle, focus rings). Dark mode promotes the gold to `--primary`. Reader themes still override inside their own scope.
 
 ### Public: [app/(public)/layout.tsx](../../app/(public)/layout.tsx)
 
@@ -61,7 +63,7 @@ A thin wrapper that mounts [PublicShell](../../components/shared/PublicShell.tsx
 
 #### [PublicShell](../../components/shared/PublicShell.tsx)
 
-- **Top bar**: brand `Qissa` on the left; md+ shows nav links (Home / Search / Bookmarks)
+- **Top bar**: brand on the left — the logo mark ([public/icons/web-app-manifest-192x192.png](../../public/icons/web-app-manifest-192x192.png), rounded) + `Qissa` wordmark in the serif; md+ shows nav links (Home / Search / Bookmarks) with a `--brand` gold underline on the active item. **Hides on scroll-down, reveals on scroll-up** (or near the top) via [useHideOnScroll](../../lib/hooks/use-hide-on-scroll.ts) — a self-contained `window.scrollY` hook. The home filter bar ([StoryBrowser](../../components/shared/StoryBrowser.tsx)) calls the same hook independently and slides from `top-14` → `top-0` in sync, so it stays pinned when the navbar slides away.
 - **Bottom nav**: 4-icon dock, mobile-only (`md:hidden`)
 - **Reader-route special case:** regex `^/s/<id>(/<variantSlug>)?/p/<n>` matches both the current variant URL and the legacy single-segment shape → renders only `<main>` (no top bar, no bottom nav, no [NavProgress](../../components/shared/NavProgress.tsx)). The reader has its own [ReaderChrome](../../components/reader/ReaderChrome.tsx). The optional variant segment in the regex matters — without it, the actual reader URL falls through to the public shell and double-renders chrome.
 

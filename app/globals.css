@@ -1,71 +1,84 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
- * Qissa design tokens — shadcn/ui (slate base) with HSL CSS variables.
- * Reader-specific themes (day/sepia/night/gray/focus) live separately in
- * components/reader (Phase 9) and override these inside the reader scope.
+ * Qissa design tokens — a warm "paper & ink" palette derived from the brand:
+ * gold #f5d399 (≈ hsl 38 82% 78%) on near-black ink #0c0a05 (≈ hsl 43 41% 3%).
+ * The amber `--brand` carries the identity (active nav, rings, accents); the
+ * neutrals are warm-tinted rather than cool slate so the whole site feels of a
+ * piece with the logo. Reader-specific themes (day/sepia/night/gray/focus)
+ * live separately in components/reader (Phase 9) and override these in scope.
  * ------------------------------------------------------------------------- */
 
 :root {
-  --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
+  --background: 40 38% 98%;
+  --foreground: 30 14% 11%;
 
   --card: 0 0% 100%;
-  --card-foreground: 222.2 84% 4.9%;
+  --card-foreground: 30 14% 11%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222.2 84% 4.9%;
+  --popover-foreground: 30 14% 11%;
 
-  --primary: 222.2 47.4% 11.2%;
-  --primary-foreground: 210 40% 98%;
+  /* Deep warm espresso — solid, readable buttons that echo the logo ink. */
+  --primary: 28 24% 15%;
+  --primary-foreground: 40 38% 97%;
 
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
+  --secondary: 40 33% 94%;
+  --secondary-foreground: 28 24% 18%;
 
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
+  --muted: 40 28% 95%;
+  --muted-foreground: 35 11% 42%;
 
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222.2 47.4% 11.2%;
+  /* Soft gold wash for hover/active surfaces. */
+  --accent: 40 60% 91%;
+  --accent-foreground: 28 38% 18%;
 
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 7 72% 50%;
+  --destructive-foreground: 40 38% 98%;
 
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 222.2 84% 4.9%;
+  --border: 38 26% 88%;
+  --input: 38 26% 88%;
+  --ring: 38 80% 52%;
 
-  --radius: 0.5rem;
+  /* Brand amber — the identity colour. */
+  --brand: 38 82% 52%;
+  --brand-foreground: 30 35% 10%;
+
+  --radius: 0.625rem;
 }
 
 .dark {
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
+  --background: 30 12% 7%;
+  --foreground: 40 30% 92%;
 
-  --card: 222.2 84% 4.9%;
-  --card-foreground: 210 40% 98%;
+  --card: 30 12% 9%;
+  --card-foreground: 40 30% 92%;
 
-  --popover: 222.2 84% 4.9%;
-  --popover-foreground: 210 40% 98%;
+  --popover: 30 12% 9%;
+  --popover-foreground: 40 30% 92%;
 
-  --primary: 210 40% 98%;
-  --primary-foreground: 222.2 47.4% 11.2%;
+  /* In the dark the gold itself becomes the primary — it glows on ink. */
+  --primary: 38 78% 60%;
+  --primary-foreground: 30 35% 9%;
 
-  --secondary: 217.2 32.6% 17.5%;
-  --secondary-foreground: 210 40% 98%;
+  --secondary: 30 9% 16%;
+  --secondary-foreground: 40 30% 92%;
 
-  --muted: 217.2 32.6% 17.5%;
-  --muted-foreground: 215 20.2% 65.1%;
+  --muted: 30 9% 16%;
+  --muted-foreground: 38 14% 63%;
 
-  --accent: 217.2 32.6% 17.5%;
-  --accent-foreground: 210 40% 98%;
+  --accent: 32 16% 18%;
+  --accent-foreground: 40 40% 90%;
 
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 7 60% 47%;
+  --destructive-foreground: 40 30% 95%;
 
-  --border: 217.2 32.6% 17.5%;
-  --input: 217.2 32.6% 17.5%;
-  --ring: 212.7 26.8% 83.9%;
+  --border: 32 10% 19%;
+  --input: 32 10% 21%;
+  --ring: 38 78% 55%;
+
+  --brand: 38 80% 60%;
+  --brand-foreground: 30 35% 9%;
 }
 
 @theme inline {
@@ -96,6 +109,9 @@
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
+
+  --color-brand: hsl(var(--brand));
+  --color-brand-foreground: hsl(var(--brand-foreground));
 
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
