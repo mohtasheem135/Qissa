@@ -92,13 +92,13 @@ export function savePartProgress(
   } catch {
     // localStorage full / disabled — silently ignore. Reading still works.
   }
-  // Notify same-tab subscribers (PartReadIndicator, ContinueReading).
+  // Notify same-tab subscribers (e.g. PartReadIndicator).
   window.dispatchEvent(new CustomEvent(SAME_TAB_EVENT));
 }
 
 /**
- * Same-tab change signal. PartReadIndicator and ContinueReading subscribe
- * via this event + the cross-tab `storage` event.
+ * Same-tab change signal. PartReadIndicator subscribes via this event + the
+ * cross-tab `storage` event.
  */
 export const PROGRESS_CHANGED_EVENT = "qissa:progress-changed" as const;
 const SAME_TAB_EVENT = PROGRESS_CHANGED_EVENT;

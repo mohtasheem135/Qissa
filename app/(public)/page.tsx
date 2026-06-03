@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { ContinueReading } from "@/components/shared/ContinueReading";
 import {
   StoryBrowser,
   type FilterCategory,
@@ -67,11 +66,9 @@ export default async function HomePage() {
   }));
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 px-4 py-6">
-      {/* Continue reading (client; collapses if no last-read) */}
-      <ContinueReading />
-
-      {/* Filterable, infinite-scroll story browser */}
+    <div className="mx-auto max-w-6xl px-4 py-6">
+      {/* Filterable, infinite-scroll story browser. The card matching the
+          reader's last-read pointer gets a "Resume" badge (client-side). */}
       <StoryBrowser
         categories={categoryRows}
         languages={languageRows}

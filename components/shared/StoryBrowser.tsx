@@ -14,6 +14,7 @@ import type { StoryCardData } from "@/components/shared/StoryCard";
 import { createClient } from "@/lib/supabase/client";
 import { useHideOnScroll } from "@/lib/hooks/use-hide-on-scroll";
 import { fetchStoryCards, type StoryCardFilter } from "@/lib/reader/story-cards";
+import { getLastRead, type LastRead } from "@/lib/reader/progress";
 import { languageFontStyle } from "@/lib/i18n/fonts";
 import { thumbnailUrl } from "@/lib/imagekit/url";
 import { toTitleCase } from "@/lib/utils/title-case";
@@ -65,6 +66,16 @@ export function StoryBrowser({
   // Mirror the navbar's scroll behaviour: when the navbar slides away, the
   // filter bar slides up to fill the gap so it stays pinned at the very top.
   const navHidden = useHideOnScroll();
+
+  // The reader's last-read pointer (localStorage) lets us badge the matching
+  // card with a "Resume" deep link, in place of a separate Continue-reading
+  // section. Read on mount and deferred to a microtask so React 19's
+  // set-state-in-effect lint stays happy (same trick as ContinueReading did).
+  const [lastRead, setLastRead] = useState<LastRead | null>(null);
+  useEffect(() => {
+    const stored = getLastRead();
+    if (stored) Promise.resolve().then(() => setLastRead(stored));
+  }, []);
 
   const [categorySlug, setCategorySlug] = useState<string>(ALL);
   const [subcategoryId, setSubcategoryId] = useState<string>(ALL);
@@ -273,7 +284,10 @@ export function StoryBrowser({
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {stories.map((story) => (
             <li key={story.id}>
-              <GridItem story={story} />
+              <GridItem
+                story={story}
+                resume={lastRead?.storyId === story.id ? lastRead : null}
+              />
             </li>
           ))}
         </ul>
@@ -281,7 +295,10 @@ export function StoryBrowser({
         <ul className="divide-border divide-y rounded-lg border">
           {stories.map((story) => (
             <li key={story.id}>
-              <ListItem story={story} />
+              <ListItem
+                story={story}
+                resume={lastRead?.storyId === story.id ? lastRead : null}
+              />
             </li>
           ))}
         </ul>
@@ -310,7 +327,58 @@ function readingLabel(story: StoryCardData) {
     : null;
 }
 
-function GridItem({ story }: { story: StoryCardData }) {
+/** Deep-link to where the reader left off, else the story landing. */
+function storyHref(story: StoryCardData, resume: LastRead | null) {
+  return resume
+    ? `/s/${story.id}/${resume.variantSlug}/p/${resume.partNumber}`
+    : `/s/${story.id}`;
+}
+
+/**
+ * Prominent "Continue" chip — marks the card the reader last left off in.
+ * Visual styling is inline (not Tailwind classes) on purpose: the badge must
+ * render its gold pill identically everywhere, with zero dependency on theme
+ * CSS-variable resolution, class purging, or class-merge edge cases. Only
+ * positioning/layout stays in `className`.
+ */
+function ResumeBadge({ compact, className }: { compact?: boolean; className?: string }) {
+  return (
+    <span
+      className={cn("inline-flex items-center justify-center gap-1", className)}
+      style={{
+        backgroundColor: "hsl(38 82% 52%)", // brand gold
+        color: "hsl(30 35% 10%)", // near-black ink
+        borderRadius: 9999,
+        padding: compact ? 4 : "4px 10px",
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: "0.04em",
+        lineHeight: 1,
+        textTransform: "uppercase",
+        boxShadow: "0 1px 4px rgba(0,0,0,0.35)",
+        whiteSpace: "nowrap",
+      }}
+    >
+      <PlayIcon />
+      {compact ? null : "Continue"}
+    </span>
+  );
+}
+
+function PlayIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden
+      style={{ width: 11, height: 11, flexShrink: 0 }}
+    >
+      <path d="M8 5v14l11-7z" />
+    </svg>
+  );
+}
+
+function GridItem({ story, resume }: { story: StoryCardData; resume: LastRead | null }) {
   const cover = thumbnailUrl(story.cover_image_url);
   const fontStyle = languageFontStyle(
     {
@@ -323,7 +391,7 @@ function GridItem({ story }: { story: StoryCardData }) {
 
   return (
     <Link
-      href={`/s/${story.id}`}
+      href={storyHref(story, resume)}
       className="group focus-visible:ring-ring block rounded-lg focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       <div className="bg-muted/40 relative aspect-[3/2] w-full overflow-hidden rounded-lg border">
@@ -341,6 +409,7 @@ function GridItem({ story }: { story: StoryCardData }) {
             no cover
           </div>
         )}
+        {resume ? <ResumeBadge className="absolute top-2 right-2 z-10" /> : null}
       </div>
       <div className="space-y-0.5 px-0.5 pt-2">
         <h3
@@ -357,7 +426,7 @@ function GridItem({ story }: { story: StoryCardData }) {
   );
 }
 
-function ListItem({ story }: { story: StoryCardData }) {
+function ListItem({ story, resume }: { story: StoryCardData; resume: LastRead | null }) {
   const cover = thumbnailUrl(story.cover_image_url);
   const fontStyle = languageFontStyle(
     {
@@ -370,7 +439,7 @@ function ListItem({ story }: { story: StoryCardData }) {
 
   return (
     <Link
-      href={`/s/${story.id}`}
+      href={storyHref(story, resume)}
       className="hover:bg-muted/40 focus-visible:ring-ring flex items-center gap-3 p-3 transition-colors focus-visible:ring-2 focus-visible:outline-none"
     >
       <div className="bg-muted/40 relative aspect-[3/2] w-20 shrink-0 overflow-hidden rounded border">
@@ -384,17 +453,20 @@ function ListItem({ story }: { story: StoryCardData }) {
             unoptimized
           />
         ) : null}
+        {resume ? <ResumeBadge compact className="absolute top-1 right-1 z-10" /> : null}
       </div>
-      <div className="min-w-0 flex-1 space-y-0.5">
-        <h3
-          className="text-foreground line-clamp-1 text-sm font-medium"
-          style={fontStyle}
-        >
-          {titleFor(story)}
-        </h3>
-        {reading ? (
-          <p className="text-muted-foreground text-xs">{reading}</p>
-        ) : null}
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="min-w-0 space-y-0.5">
+          <h3
+            className="text-foreground line-clamp-1 text-sm font-medium"
+            style={fontStyle}
+          >
+            {titleFor(story)}
+          </h3>
+          {reading ? (
+            <p className="text-muted-foreground text-xs">{reading}</p>
+          ) : null}
+        </div>
       </div>
     </Link>
   );

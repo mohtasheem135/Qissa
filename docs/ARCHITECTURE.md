@@ -73,7 +73,7 @@
 2. Server uses [lib/supabase/server.ts](../lib/supabase/server.ts) to fetch published stories (RLS enforces "published + active")
 3. HTML streams down; [components/shared/PublicShell.tsx](../components/shared/PublicShell.tsx) wraps it with top bar + bottom nav
 4. Root layout mounts [ServiceWorkerRegistration](../components/shared/ServiceWorkerRegistration.tsx) (production-only) → `public/sw.js` installs
-5. [ContinueReading](../components/shared/ContinueReading.tsx) reads `qissa:last-read` from `localStorage` and fetches that story via the browser client if present
+5. [StoryBrowser](../components/shared/StoryBrowser.tsx) reads `qissa:last-read` from `localStorage` on mount and badges the matching grid/list card with a "Resume" deep link if present
 
 ### 3.2 Reader → reader page → cached
 
@@ -185,7 +185,7 @@ when there's no premium audio. Full detail:
 | Reader settings (theme, line-height, alignment, font variant, show-original) | `qissa:reader-settings` JSON in `localStorage` | Per-device, no account model in Phase 1 |
 | Reader font size | `qissa:fontSize` integer in `localStorage` | Separate from settings — A−/A+ buttons hit it constantly, isolating avoids re-serializing the whole blob |
 | Per-part reading progress | `qissa:progress:<storyId>:<variantSlug>:<partNumber>` | Variant-scoped — switching variants doesn't carry progress; drives ✓/⏳ indicators on story landing |
-| Last-read pointer | `qissa:last-read` (`{ storyId, variantSlug, partNumber, updatedAt }`) | Drives "Continue Reading" on home |
+| Last-read pointer | `qissa:last-read` (`{ storyId, variantSlug, partNumber, updatedAt }`) | Drives the "Resume" badge on the home story browser |
 | Bookmarks | `qissa:bookmarks` array | Module-level cache so `useSyncExternalStore` doesn't infinite-loop |
 | Install banner cooldown | `qissa:installPromptDismissedAt` | 7-day re-prompt window |
 

@@ -95,7 +95,7 @@ Reader-agnostic shared components under [components/shared/](../../components/sh
 | [SearchBar](../../components/shared/SearchBar.tsx) | home + search | client form posting `?q=` |
 | [BookmarkButton](../../components/shared/BookmarkButton.tsx) | story landing + reader top bar | heart toggle via `useSyncExternalStore` |
 | [ShareButton](../../components/shared/ShareButton.tsx) | story landing + reader top bar | Web Share API + clipboard fallback |
-| [ContinueReading](../../components/shared/ContinueReading.tsx) | home | localStorage-driven Resume card |
+| [StoryBrowser](../../components/shared/StoryBrowser.tsx) | home | filter bar + grid/list infinite scroll; localStorage-driven Resume badge on the last-read card |
 | [PartReadIndicator](../../components/shared/PartReadIndicator.tsx) | story landing parts list | ✓ / ⏳ / ○ per part |
 | [InstallPrompt](../../components/shared/InstallPrompt.tsx) | root layout | Gated PWA install banner |
 | [ServiceWorkerRegistration](../../components/shared/ServiceWorkerRegistration.tsx) | root layout | Registers `/sw.js` in prod |

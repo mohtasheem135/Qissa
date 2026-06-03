@@ -10,10 +10,11 @@ All under [app/(public)/](../../app/(public)/). Mobile-first; shell defined by [
 
 Sections, top to bottom:
 
-1. **Continue reading** — [ContinueReading](../../components/shared/ContinueReading.tsx) Client Component; reads `qissa:last-read`, fetches the story via the browser Supabase client, renders one [StoryCard](../../components/shared/StoryCard.tsx) + Resume link. Renders nothing if no last-read.
-2. **Story browser** — [StoryBrowser](../../components/shared/StoryBrowser.tsx) Client Component. A filter bar (**category → subcategory → language**, plus a **grid/list layout toggle**, grid by default) that sticks just below the navbar (`top-14`), over an **infinite-scroll** list showing just the cover, title, and reading time per story. Page 0 is server-rendered; the browser Supabase client lazy-loads later pages and re-runs every filter change via `fetchStoryCards()` (RLS-gated to published content). The page passes down: the first page of cards, the categories→subcategories tree, and the active languages — the last two are built from `!inner` joins so the filter bar only offers options that have published stories.
+1. **Story browser** — [StoryBrowser](../../components/shared/StoryBrowser.tsx) Client Component. A filter bar (**category → subcategory → language**, plus a **grid/list layout toggle**, grid by default) that sticks just below the navbar (`top-14`), over an **infinite-scroll** list showing just the cover, title, and reading time per story. Page 0 is server-rendered; the browser Supabase client lazy-loads later pages and re-runs every filter change via `fetchStoryCards()` (RLS-gated to published content). The page passes down: the first page of cards, the categories→subcategories tree, and the active languages — the last two are built from `!inner` joins so the filter bar only offers options that have published stories.
 
-There is **no hero banner** — the page opens straight into Continue reading + the browser. Search lives in the top-nav `Search` link / `/search`.
+   **Resume badge:** on mount the browser reads `qissa:last-read` (`getLastRead()`); the card matching that story id shows a clean **"Resume"** pill in the cover's top-right corner and deep-links to the last-read part instead of the story landing. This replaces the old standalone "Continue reading" section.
+
+There is **no hero banner and no Continue-reading section** — the page opens straight into the browser. Search lives in the top-nav `Search` link / `/search`.
 
 Shared query shape lives in [lib/reader/story-cards.ts](../../lib/reader/story-cards.ts) (`STORY_CARD_COLUMNS` + `toStoryCard()`); the home page's filtered, paginated fetch is `fetchStoryCards(supabase, { filter, page })` in the same file (`STORY_PAGE_SIZE = 24`). Filtering by language narrows the embedded `variants` `!inner` join via `variants.target_language`; filtering by category/subcategory resolves to a `subcategory_id IN (…)` list. Every other listing page uses `STORY_CARD_COLUMNS` + `toStoryCard()` directly.
 
@@ -72,7 +73,7 @@ Sections:
 5. **Available in** — grid of cards, one per published variant + a trailing **Source card**. Variant cards link to `/s/<id>/<slug>/p/1` and show language + tone badges, the primary marker, and estimated reading minutes. The Source card carries a `Source` badge + author and links to `/s/<id>/source/p/1` so readers can open the original prose directly. A "Request another translation" CTA sits below the grid.
 6. **Original source link** — optional, opens externally if `source_url` is set
 
-(No standalone Parts list — readers enter via the cards. Progress is tracked per (story × variant), surfaced on the Continue Reading card on home.)
+(No standalone Parts list — readers enter via the cards. Progress is tracked per (story × variant), surfaced as the Resume badge on the home story browser.)
 
 **Open Graph / Twitter card image (1200×630)** is auto-wired by the co-located [opengraph-image.tsx](../../app/(public)/s/[storyId]/opengraph-image.tsx) + [twitter-image.tsx](../../app/(public)/s/[storyId]/twitter-image.tsx) (which re-exports the OG image). The renderer queries published + active story + variants, then composes cover (ImageKit `w-360,h-480` transform) + title (auto-scaled to fit) + author + up to 4 language pills + Qissa wordmark via `next/og`'s `ImageResponse`. A stale or unpublished link falls back to a brand mark so a broken link still produces a clean preview. The root [app/opengraph-image.tsx](../../app/opengraph-image.tsx) covers every page without its own OG.
 

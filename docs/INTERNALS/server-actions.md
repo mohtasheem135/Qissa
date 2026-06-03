@@ -129,7 +129,7 @@ useEffect(() => {
 }, []);
 ```
 
-Used in: [ContinueReading](../../components/shared/ContinueReading.tsx), [BookmarksPage](../../app/(public)/bookmarks/page.tsx), [ReaderShell](../../components/reader/ReaderShell.tsx) hydration effect.
+Used in: [StoryBrowser](../../components/shared/StoryBrowser.tsx) (deferred last-read read), [BookmarksPage](../../app/(public)/bookmarks/page.tsx), [ReaderShell](../../components/reader/ReaderShell.tsx) hydration effect.
 
 ### Discriminated-union state for async data
 
@@ -144,7 +144,7 @@ type State =
 const [state, setState] = useState<State>({ kind: "loading" });
 ```
 
-Single setState call inside the async callback → no React-19 lint issue. Used in [ContinueReading](../../components/shared/ContinueReading.tsx).
+Single setState call inside the async callback → no React-19 lint issue. (Pattern shape; a good fit whenever a client component loads data on mount and renders loading / empty / loaded shapes.)
 
 ### Auto-close on save via savedAt timestamp
 

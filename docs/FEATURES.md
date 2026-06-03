@@ -11,16 +11,15 @@ Source of truth for **what** features should exist: [01-requirements.md](./01-re
 ### Browse home page
 - **URL:** `/`
 - **Page:** [app/(public)/page.tsx](../app/(public)/page.tsx)
-- **Components:** [ContinueReading](../components/shared/ContinueReading.tsx) · [StoryBrowser](../components/shared/StoryBrowser.tsx) (no hero banner — search lives in the nav)
+- **Components:** [StoryBrowser](../components/shared/StoryBrowser.tsx) (no hero banner, no separate Continue-reading section — search lives in the nav)
 - **Layout:** sticky filter bar (category → subcategory → language) + grid/list toggle (grid default) over an **infinite-scroll** list; each item shows cover · title · reading time only
 - **Data:** server-renders page 0 of stories + the categories→subcategories tree + active languages (filter options built from `!inner` joins so they only list options with published stories); the browser client lazy-loads later pages & re-filters via `fetchStoryCards()` ([lib/reader/story-cards.ts](../lib/reader/story-cards.ts), `STORY_PAGE_SIZE = 24`)
 - **Doc:** [UI/public.md](./UI/public.md)
 
-### Continue reading
-- **Component:** [ContinueReading](../components/shared/ContinueReading.tsx)
-- **State:** `qissa:last-read` in localStorage; written by [savePartProgress()](../lib/reader/progress.ts)
-- **Fetch:** browser Supabase client, RLS-gated to published+active
-- **UX:** discriminated-union state; renders nothing if no last-read
+### Continue reading (Resume badge)
+- **Where:** surfaced inline in the home [StoryBrowser](../components/shared/StoryBrowser.tsx), not a separate section
+- **State:** `qissa:last-read` in localStorage; written by [savePartProgress()](../lib/reader/progress.ts), read via `getLastRead()`
+- **UX:** the grid/list card whose `id` matches the last-read pointer shows a clean **"Resume"** badge in the cover's top-right corner, and that card deep-links to `/s/<id>/<variantSlug>/p/<partNumber>` instead of the story landing. Read on mount (client-only), so it's absent on first server paint and appears after hydration.
 
 ### Browse by category
 - **URLs:** `/c/[categorySlug]` → subcategories grid; `/c/[categorySlug]/[subcategorySlug]` → story grid
@@ -48,7 +47,7 @@ Source of truth for **what** features should exist: [01-requirements.md](./01-re
 - **URL:** `/s/[storyId]`
 - **Page:** [app/(public)/s/[storyId]/page.tsx](../app/(public)/s/[storyId]/page.tsx)
 - **Shows:** cover (heroUrl), source title (titlecased), author, Start Reading button (routes to the primary variant's part 1), **"Available in" grid** with one card per published variant + a trailing **Source card** linking to `/s/<id>/source/p/1`, Bookmark + Share, **"Request another translation" CTA** ([RequestStoryDialog](../components/shared/RequestStoryDialog.tsx))
-- **No standalone Parts list:** readers enter via the variant or source cards; per-variant progress is tracked in localStorage and surfaced on home's Continue Reading
+- **No standalone Parts list:** readers enter via the variant or source cards; per-variant progress is tracked in localStorage and surfaced as the home Resume badge
 - **Doc:** [UI/public.md](./UI/public.md)
 
 ### Source reader
