@@ -2,8 +2,10 @@
 
 import { Suspense } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
+import { useHideOnScroll } from "@/lib/hooks/use-hide-on-scroll";
 import { NavProgress } from "./NavProgress";
 
 const NAV_ITEMS: ReadonlyArray<{
@@ -71,11 +73,31 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
 
 function TopBar() {
   const pathname = usePathname();
+  const hidden = useHideOnScroll();
   return (
-    <header className="bg-background/80 sticky top-0 z-30 border-b backdrop-blur">
+    <header
+      className={cn(
+        "bg-background/70 sticky top-0 z-30 border-b backdrop-blur-md transition-transform duration-300 ease-out",
+        hidden && "-translate-y-full",
+      )}
+    >
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-        <Link href="/" className="text-base font-semibold tracking-tight">
-          Qissa
+        <Link
+          href="/"
+          aria-label="Qissa — home"
+          className="group flex items-center gap-2.5 focus-visible:outline-none"
+        >
+          <Image
+            src="/icons/web-app-manifest-192x192.png"
+            alt=""
+            width={32}
+            height={32}
+            priority
+            className="ring-border size-8 rounded-lg ring-1 transition-transform group-hover:scale-105"
+          />
+          <span className="font-serif text-xl leading-none font-semibold tracking-tight">
+            Qissa
+          </span>
         </Link>
         <nav aria-label="Primary" className="hidden md:flex md:items-center md:gap-1">
           {NAV_ITEMS.filter((item) => item.href !== "/browse").map((item) => {
@@ -86,13 +108,19 @@ function TopBar() {
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "rounded-md px-3 py-1.5 text-sm transition-colors",
+                  "relative rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                   active
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/60",
                 )}
               >
                 {item.label}
+                {active ? (
+                  <span
+                    aria-hidden
+                    className="bg-brand absolute inset-x-3 -bottom-px h-0.5 rounded-full"
+                  />
+                ) : null}
               </Link>
             );
           })}
@@ -107,7 +135,7 @@ function BottomNav() {
   return (
     <nav
       aria-label="Primary mobile"
-      className="bg-background fixed inset-x-0 bottom-0 z-30 border-t md:hidden"
+      className="bg-background/90 fixed inset-x-0 bottom-0 z-30 border-t backdrop-blur-md md:hidden"
     >
       <ul className="mx-auto grid max-w-md grid-cols-4">
         {NAV_ITEMS.map((item) => {
@@ -118,8 +146,8 @@ function BottomNav() {
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex flex-col items-center gap-0.5 py-2.5 text-[10px]",
-                  active ? "text-primary" : "text-muted-foreground",
+                  "flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium transition-colors",
+                  active ? "text-brand" : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <span className={cn(active ? "scale-110" : undefined, "transition-transform")}>

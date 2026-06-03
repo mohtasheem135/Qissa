@@ -1,4 +1,6 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { StoryCardData } from "@/components/shared/StoryCard";
+import type { Database } from "@/lib/supabase/types";
 
 /**
  * Columns every public listing pulls to render a story card. Each card
@@ -58,4 +60,58 @@ export function toStoryCard(row: StoryCardQueryRow): StoryCardData | null {
     language_font_family_reading: variant.language?.font_family_reading ?? null,
     tone_name: variant.tone?.name ?? null,
   };
+}
+
+/** Page size for the home-page infinite-scroll listing. */
+export const STORY_PAGE_SIZE = 24;
+
+export interface StoryCardFilter {
+  /**
+   * Restrict to stories in these subcategories. Resolve a selected category to
+   * all of its subcategory ids, or a selected subcategory to a single id.
+   * `null`/empty means "no subcategory filter".
+   */
+  subcategoryIds?: string[] | null;
+  /** Restrict to stories that have a published variant in this language code. */
+  language?: string | null;
+}
+
+/**
+ * Fetch one page of story cards with optional category/subcategory/language
+ * filters, newest first. Works with either the server or browser Supabase
+ * client (RLS gates both to published + active content), so the home page can
+ * render page 0 on the server and the client can lazy-load the rest on scroll.
+ */
+export async function fetchStoryCards(
+  supabase: SupabaseClient<Database>,
+  { filter, page }: { filter?: StoryCardFilter; page: number },
+): Promise<{ cards: StoryCardData[]; hasMore: boolean }> {
+  const from = page * STORY_PAGE_SIZE;
+  const to = from + STORY_PAGE_SIZE - 1;
+
+  let query = supabase
+    .from("stories")
+    .select(STORY_CARD_COLUMNS)
+    .order("published_at", { ascending: false })
+    .range(from, to);
+
+  if (filter?.subcategoryIds && filter.subcategoryIds.length > 0) {
+    query = query.in("subcategory_id", filter.subcategoryIds);
+  }
+  if (filter?.language) {
+    // Filtering the embedded `variants` relation (which is an `!inner` join)
+    // both narrows each story's variants to the chosen language and drops
+    // stories that have no such variant.
+    query = query.eq("variants.target_language", filter.language);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const cards = (data ?? [])
+    .map(toStoryCard)
+    .filter((s): s is StoryCardData => s !== null);
+
+  // A full page back implies there may be more; a short page means we're done.
+  return { cards, hasMore: (data?.length ?? 0) === STORY_PAGE_SIZE };
 }

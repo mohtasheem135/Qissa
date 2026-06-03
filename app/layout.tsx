@@ -1,13 +1,14 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Lora } from "next/font/google";
+import { Plus_Jakarta_Sans, Lora } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { InstallPrompt } from "@/components/shared/InstallPrompt";
 import { ServiceWorkerRegistration } from "@/components/shared/ServiceWorkerRegistration";
 import "./globals.css";
 
-// Default UI sans for chrome (admin + reader chrome). Language-specific reading
-// fonts are loaded per-story in Phase 8/9 via lib/i18n/fonts.ts.
-const inter = Inter({
+// Default UI sans for chrome (public + admin + reader chrome). A modern, clean
+// geometric-humanist face. Language-specific reading fonts are loaded per-story
+// in Phase 8/9 via lib/i18n/fonts.ts.
+const sans = Plus_Jakarta_Sans({
   variable: "--font-sans",
   subsets: ["latin"],
   display: "swap",
@@ -64,7 +65,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${lora.variable} h-full antialiased`}>
+    <html lang="en" className={`${sans.variable} ${lora.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
         {children}
         <ServiceWorkerRegistration />

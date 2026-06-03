@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
-import { CategoryTile, type CategoryTileData } from "@/components/shared/CategoryTile";
 import { ContinueReading } from "@/components/shared/ContinueReading";
-import { SearchBar } from "@/components/shared/SearchBar";
-import { StoryCard } from "@/components/shared/StoryCard";
+import {
+  StoryBrowser,
+  type FilterCategory,
+  type FilterLanguage,
+} from "@/components/shared/StoryBrowser";
 import { createClient } from "@/lib/supabase/server";
-import { STORY_CARD_COLUMNS, toStoryCard } from "@/lib/reader/story-cards";
+import { fetchStoryCards } from "@/lib/reader/story-cards";
 
 export const metadata: Metadata = {
   title: "Qissa — Stories, translated with soul",
@@ -17,101 +19,65 @@ export const revalidate = 60;
 export default async function HomePage() {
   const supabase = await createClient();
 
-  const [{ data: recent, error: recentErr }, { data: categories, error: catErr }] =
+  const [{ cards, hasMore }, { data: categories, error: catErr }, { data: languages, error: langErr }] =
     await Promise.all([
-      supabase
-        .from("stories")
-        .select(STORY_CARD_COLUMNS)
-        .order("published_at", { ascending: false })
-        .limit(8),
+      fetchStoryCards(supabase, { page: 0 }),
+      // Only categories/subcategories that actually have published stories — the
+      // `!inner` joins drop empties so the filter bar never offers a dead end.
       supabase
         .from("categories")
         .select(
-          `slug, name, icon_emoji, description, display_order,
-           subcategories!inner ( stories!inner ( id ) )`,
+          `slug, name, display_order,
+           subcategories!inner ( id, slug, name, display_order, stories!inner ( id ) )`,
         )
+        .eq("is_active", true)
+        .order("display_order", { ascending: true }),
+      supabase
+        .from("languages")
+        .select("code, name_english, display_order")
+        .eq("is_active", true)
         .order("display_order", { ascending: true }),
     ]);
 
-  if (recentErr) throw recentErr;
   if (catErr) throw catErr;
+  if (langErr) throw langErr;
 
-  const stories = (recent ?? [])
-    .map(toStoryCard)
-    .filter((s): s is NonNullable<typeof s> => s !== null);
-
-  // De-dup categories (embedded join can repeat rows) + count stories.
-  const categoryRows: CategoryTileData[] = [];
-  const seen = new Set<string>();
+  // De-dup categories + subcategories (the embedded `stories` join repeats rows).
+  const categoryRows: FilterCategory[] = [];
+  const seenCat = new Set<string>();
   for (const row of categories ?? []) {
-    if (seen.has(row.slug)) continue;
-    seen.add(row.slug);
-    const storyCount = (row.subcategories ?? []).reduce(
-      (sum, sub) => sum + (sub.stories?.length ?? 0),
-      0,
-    );
-    categoryRows.push({
-      slug: row.slug,
-      name: row.name,
-      icon_emoji: row.icon_emoji,
-      description: row.description,
-      story_count: storyCount,
-    });
+    if (seenCat.has(row.slug)) continue;
+    seenCat.add(row.slug);
+
+    const subs: FilterCategory["subcategories"] = [];
+    const seenSub = new Set<string>();
+    for (const sub of (row.subcategories ?? [])
+      .slice()
+      .sort((a, b) => a.display_order - b.display_order)) {
+      if (seenSub.has(sub.id)) continue;
+      seenSub.add(sub.id);
+      subs.push({ id: sub.id, slug: sub.slug, name: sub.name });
+    }
+    categoryRows.push({ slug: row.slug, name: row.name, subcategories: subs });
   }
 
+  const languageRows: FilterLanguage[] = (languages ?? []).map((l) => ({
+    code: l.code,
+    name_english: l.name_english,
+  }));
+
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:py-12">
-      {/* Hero */}
-      <section className="space-y-4 py-8 text-center sm:py-12">
-        <p className="text-muted-foreground text-xs tracking-widest uppercase">Qissa</p>
-        <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-5xl">
-          Stories, translated with soul.
-        </h1>
-        <p className="text-muted-foreground mx-auto max-w-prose text-sm sm:text-base">
-          Literary translations of curated stories into Urdu, Hindi, Bengali, Arabic, Tamil and
-          more — written in the prose style of legendary authors.
-        </p>
-        <div className="mx-auto max-w-md pt-2">
-          <SearchBar />
-        </div>
-      </section>
+    <div className="mx-auto max-w-6xl space-y-8 px-4 py-6">
+      {/* Continue reading (client; collapses if no last-read) */}
+      <ContinueReading />
 
-      <div className="space-y-12">
-        {/* Continue reading (client; collapses if no last-read) */}
-        <ContinueReading />
-
-        {/* Recently published */}
-        <section aria-labelledby="recent" className="space-y-4">
-          <h2 id="recent" className="text-lg font-semibold tracking-tight">
-            Recently published
-          </h2>
-          {stories.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No stories yet — check back soon.</p>
-          ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {stories.map((story) => (
-                <StoryCard key={story.id} story={story} />
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Categories */}
-        <section aria-labelledby="categories" className="space-y-4">
-          <h2 id="categories" className="text-lg font-semibold tracking-tight">
-            Browse by category
-          </h2>
-          {categoryRows.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No categories with stories yet.</p>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {categoryRows.map((category) => (
-                <CategoryTile key={category.slug} category={category} />
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
+      {/* Filterable, infinite-scroll story browser */}
+      <StoryBrowser
+        categories={categoryRows}
+        languages={languageRows}
+        initialStories={cards}
+        initialHasMore={hasMore}
+      />
     </div>
   );
 }
