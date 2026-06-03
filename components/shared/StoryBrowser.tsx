@@ -334,17 +334,29 @@ function storyHref(story: StoryCardData, resume: LastRead | null) {
     : `/s/${story.id}`;
 }
 
-/** Clean "Resume" pill — marks the card the reader last left off in. */
-function ResumeBadge({ className }: { className?: string }) {
+/** Prominent "Continue" chip — marks the card the reader last left off in. */
+function ResumeBadge({ compact, className }: { compact?: boolean; className?: string }) {
   return (
     <span
       className={cn(
-        "bg-brand text-brand-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase shadow-sm",
+        "bg-brand text-brand-foreground inline-flex items-center justify-center gap-1 font-bold uppercase shadow-md ring-1 ring-black/15",
+        compact
+          ? "size-5 rounded-full"
+          : "rounded-full px-2.5 py-1 text-[11px] tracking-wide",
         className,
       )}
     >
-      Resume
+      <PlayIcon />
+      {compact ? null : "Continue"}
     </span>
+  );
+}
+
+function PlayIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-3 shrink-0" fill="currentColor" aria-hidden>
+      <path d="M8 5v14l11-7z" />
+    </svg>
   );
 }
 
@@ -379,7 +391,7 @@ function GridItem({ story, resume }: { story: StoryCardData; resume: LastRead | 
             no cover
           </div>
         )}
-        {resume ? <ResumeBadge className="absolute top-2 right-2" /> : null}
+        {resume ? <ResumeBadge className="absolute top-2 right-2 z-10" /> : null}
       </div>
       <div className="space-y-0.5 px-0.5 pt-2">
         <h3
@@ -423,9 +435,7 @@ function ListItem({ story, resume }: { story: StoryCardData; resume: LastRead | 
             unoptimized
           />
         ) : null}
-        {resume ? (
-          <ResumeBadge className="absolute top-1 right-1 px-1.5 py-0 text-[9px] normal-case" />
-        ) : null}
+        {resume ? <ResumeBadge compact className="absolute top-1 right-1 z-10" /> : null}
       </div>
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <div className="min-w-0 space-y-0.5">
